@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A4 tray — 3D-printed parametric preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      #app canvas {
+        display: block;
+      }
+      #panel {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        width: 290px;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid #d3d8de;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #38404a;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+      }
+      #panel h1 {
+        font-size: 14px;
+        margin: 0 0 2px;
+      }
+      #panel .sub {
+        color: #7b8794;
+        font-size: 11px;
+        margin: 0 0 10px;
+      }
+      #panel .group {
+        margin: 9px 0;
+        padding-top: 8px;
+        border-top: 1px solid #e6e9ed;
+      }
+      #panel .group:first-of-type {
+        border-top: none;
+        padding-top: 2px;
+      }
+      #panel h2 {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #9aa3ad;
+        margin: 0 0 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 78px 44px;
+        align-items: center;
+        gap: 6px;
+        margin: 4px 0;
+      }
+      .row label {
+        font-size: 12px;
+      }
+      .row input[type="range"] {
+        width: 100%;
+      }
+      .row input[type="text"] {
+        width: 100%;
+        font-size: 12px;
+        padding: 1px 3px;
+        border: 1px solid #ccd2da;
+        border-radius: 4px;
+      }
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0 2px;
+        font-size: 12px;
+      }
+      .sel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin: 6px 0 2px;
+        font-size: 12px;
+      }
+      .sel select {
+        font-size: 12px;
+        padding: 2px 4px;
+        border: 1px solid #ccd2da;
+        border-radius: 4px;
+        background: #fff;
+      }
+      #dims {
+        margin-top: 10px;
+        color: #5a646f;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      #fits {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      .fit {
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        cursor: default;
+      }
+      .fit.ok {
+        background: #e3f5e8;
+        color: #2f7d4a;
+        border-color: #bfe6cb;
+      }
+      .fit.no {
+        background: #f1f2f4;
+        color: #aab1ba;
+        text-decoration: line-through;
+      }
+      #download {
+        margin-top: 12px;
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #fff;
+        background: #3f7cac;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #download:hover {
+        background: #356a94;
+      }
+      #reset {
+        margin-top: 8px;
+        padding: 3px 8px;
+        font-size: 11px;
+        color: #7b8794;
+        background: none;
+        border: 1px solid #ccd2da;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      #reset:hover {
+        color: #38404a;
+        border-color: #a9b2bd;
+      }
+      .hint {
+        margin-top: 12px;
+        color: #7b8794;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="panel">
+      <h1>A4 tray — 3D print</h1>
+      <p class="sub">Parametric, open-front, stackable · sized for Bambu Lab beds</p>
+
+      <section class="group">
+        <h2>Size &amp; fit</h2>
+        <div class="rows" data-group="size"></div>
+      </section>
+
+      <section class="group">
+        <h2>Walls &amp; base</h2>
+        <div class="rows" data-group="build"></div>
+      </section>
+
+      <section class="group">
+        <h2>Pattern</h2>
+        <div class="rows" data-group="pattern"></div>
+        <label class="sel"
+          >Wall style
+          <select id="wallStyle">
+            <option value="solid">Solid</option>
+            <option value="louvres">Louvres</option>
+            <option value="grid">Grid</option>
+            <option value="holes">Holes</option>
+            <option value="diamond">Diamond</option>
+            <option value="honeycomb">Honeycomb</option>
+            <option value="voronoi">Voronoi</option>
+          </select>
+        </label>
+        <label class="sel"
+          >Floor style
+          <select id="floorStyle">
+            <option value="solid">Solid</option>
+            <option value="louvres">Louvres</option>
+            <option value="grid">Grid</option>
+            <option value="holes">Holes</option>
+            <option value="diamond">Diamond</option>
+            <option value="honeycomb">Honeycomb</option>
+            <option value="voronoi">Voronoi</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="group">
+        <h2>Stacking</h2>
+        <div class="rows" data-group="stack"></div>
+        <label class="toggle"
+          ><input id="stackRidge" type="checkbox" checked /> Stacking ridge</label
+        >
+      </section>
+
+      <section class="group">
+        <h2>View &amp; output</h2>
+        <label class="sel"
+          >Material
+          <select id="material">
+            <option value="PLA">PLA</option>
+            <option value="PETG">PETG</option>
+            <option value="ABS">ABS</option>
+            <option value="TPU">TPU</option>
+          </select>
+        </label>
+        <label class="toggle"><input id="showPaper" type="checkbox" checked /> Show A4 sheet</label>
+        <label class="toggle"><input id="showStack" type="checkbox" /> Show stack (×3)</label>
+      </section>
+
+      <button id="reset" type="button">Reset to defaults</button>
+      <div id="dims"></div>
+      <div id="fits"></div>
+      <button id="download">⬇ Download STL</button>
+      <div class="hint">
+        Drag to orbit · scroll to zoom · right-drag to pan. The preview and the exported STL are
+        built from the same geometry (mm, Z-up) so the print matches what you see.
+      </div>
+    </div>
+    <script type="module" src="/src/viewer/main.ts"></script>
+  </body>
+</html>
