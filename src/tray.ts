@@ -202,10 +202,12 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
       // Reserve a solid frame around the scoop: bite the (dilated) scoop out of the floor window so the
       // floor stays solid there; cutScoop later removes the un-dilated notch, leaving a clean border
       // instead of stray cut-off cell ends along the scoop edge. Holes left in the added panel here
-      // sit over still-solid floor, so they fill in.
+      // sit over still-solid floor, so they fill in. Dilate by the margin + the field frame so the
+      // scoop's border matches the perimeter border: `m` is the window inset and `frame()` is the
+      // extra field shrink, neither of which the interior scoop edge gets for free.
       const sc = scoopDims(p, d);
       if (sc) {
-        const b = frame(p.floorPatternScale);
+        const b = m + frame(p.floorPatternScale);
         const pad = roundedRect(sc.w + 2 * b, sc.sd * 2 + 2 * b, sc.r + b, true);
         win = s.sub(win, s.move(s.extrude(pad, p.floor + 4), 0, sc.fy, -2));
       }
