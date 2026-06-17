@@ -1,7 +1,8 @@
-# a4-stackable-trays
+# stackable-trays
 
-Parametric, open-front, **stackable A4 paper trays** for FDM 3D printing. Tune everything with
-sliders, watch the model and the filament estimate update live, then export a print-ready STL.
+Parametric, open-front, **stackable trays** for FDM 3D printing — **A4 paper by default**, but sized
+for any item (photos, cards, envelopes, …) via item dimensions or one-click presets. Tune everything
+with sliders, watch the model and the filament estimate update live, then export a print-ready STL.
 The preview and the STL come from the _same_ geometry, so the print matches what you see.
 
 ![Preview](docs/preview.png)
@@ -15,10 +16,17 @@ so it fits smaller beds.
 
 ## What you get
 
-- **Adjustable front** — the front-lip slider runs from `0` (fully open: no front wall, and the
-  floor under it removed for tighter bed fitment), through a low bump-stop lip, up to the **wall
-  height** for a fully closed front that keeps its stacking ridge like the other three walls. The
-  slider is capped at the current wall height.
+- **Any item** — set **item width × length** directly, or pick a **preset** (A4, US Letter, A5,
+  postcard, 4×6 photo, index card, #10 envelope, business card). **Clearance** is one uniform fit gap
+  applied to every enclosing wall.
+- **Front overhang** — `frontOverhang` sets how far the item sticks out the open front. At `0` the
+  item is **fully enclosed** and the front earns its own clearance like the sides and back; turn it up
+  and the item overhangs (the original A4 letter-tray feel ≈ 20% out) so you can grab it while stacked,
+  which also shrinks the footprint to fit smaller beds.
+- **Adjustable front lip** — independent of the overhang (this is vertical): the lip slider runs from
+  `0` (open top: no front wall, and the floor under it removed for tighter bed fitment), through a low
+  bump-stop lip, up to the **wall height** for a fully closed front that keeps its stacking ridge like
+  the other three walls. The slider is capped at the current wall height.
 - **Front scoop** (optional) — a central grab cutout on the front edge, so you can still pull a
   sheet out of a tightly stacked middle tray. Adjustable width _and_ depth; it dips any front lip
   down to the floor and bites back into the floor edge, so it helps whether the front is open or
@@ -50,12 +58,12 @@ vp check        # format + lint + typecheck
 
 ## Controls
 
-Grouped in the panel: **Size & fit** (footprint, clearance, front lip, front scoop width + depth) ·
-**Walls** (height, thickness, corner radius, style, pattern size + margin) ·
-**Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge height/width, on/off) ·
-**Label** (clip rail side + clip export) · **View & output** (material, show sheet, show stack).
-Walls and floor each have their own pattern size and margin so you can tune them independently; the
-margin is the solid border width and reads the same on the walls and the floor.
+Grouped in the panel: **Size & fit** (item preset, item width + length, clearance, front overhang,
+front lip, front scoop width + depth) · **Walls** (height, thickness, corner radius, style, pattern
+size + margin) · **Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge
+height/width, on/off) · **Label** (clip rail side + clip export) · **View & output** (material, show
+item, show stack). Walls and floor each have their own pattern size and margin so you can tune them
+independently; the margin is the solid border width and reads the same on the walls and the floor.
 
 ## How it works
 

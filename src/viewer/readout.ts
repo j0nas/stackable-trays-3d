@@ -1,4 +1,4 @@
-// The text readout under the panel: footprint, A4 coverage, filament estimate, and the Bambu Lab
+// The text readout under the panel: footprint, item coverage, filament estimate, and the Bambu Lab
 // bed-fit badges. Fed the live mesh geometry so the weight tracks whatever pattern is cut.
 
 import type { BufferGeometry } from "three";
@@ -47,12 +47,12 @@ export function createReadout(els: ReadoutEls): (params: Params) => void {
     const d = dims(params);
     const long = Math.max(d.outerW, d.outerL);
     const short = Math.min(d.outerW, d.outerL);
-    const pct = Math.round((params.capture / params.a4Length) * 100);
+    const held = Math.round(((params.itemLength - params.frontOverhang) / params.itemLength) * 100);
     const mat = els.materialSel.value;
     const volCm3 = meshVolumeCm3(els.getGeometry());
     const grams = Math.round(volCm3 * (DENSITY[mat] ?? 1.24));
     const metres = volCm3 / FILAMENT_AREA_MM2; // cm^3 -> mm^3 (x1000) -> length (/area, /1000) cancel
-    els.dimsEl.textContent = `${d.outerW.toFixed(0)} × ${d.outerL.toFixed(0)} mm · holds ${pct}% of A4 · ≈ ${grams} g · ${metres.toFixed(0)} m ${mat} (solid)`;
+    els.dimsEl.textContent = `${d.outerW.toFixed(0)} × ${d.outerL.toFixed(0)} mm · holds ${held}% of item · ≈ ${grams} g · ${metres.toFixed(0)} m ${mat} (solid)`;
 
     // Compatibility badges (part may rotate 90°). Amber = fits the bed but only with the P1/X1
     // exclusion-zone mod; the legend below appears only then and links to the Bambu wiki.

@@ -1,11 +1,12 @@
-// Parameters for the 3D-printed, open-front, stackable A4 tray. All millimetres.
-// Pure / framework-free so the geometry builder and the viewer share one source of truth.
+// Parameters for the 3D-printed, open-front, stackable tray. All millimetres. A4 paper is just the
+// default item — any width × length works (see ITEM_PRESETS), so the tray suits photos, cards,
+// envelopes, etc. Pure / framework-free so the geometry builder and the viewer share one source of truth.
 
 export type Params = {
-  a4Width: number; // A4 short edge
-  a4Length: number; // A4 long edge
-  clearance: number; // gap per side wall (fits laminate pouches / pouched paper stacks)
-  capture: number; // how much of the sheet's length the tray holds; the rest overhangs the open front
+  itemWidth: number; // width of the held item (left-right); A4 short edge by default
+  itemLength: number; // length of the held item (front-back); A4 long edge by default
+  clearance: number; // uniform fit gap to every enclosing wall (sides, back, and front when enclosed)
+  frontOverhang: number; // how far the item sticks out the open front; 0 = fully enclosed (front gets clearance)
   wall: number; // wall thickness
   floor: number; // base/floor thickness
   depth: number; // interior height (back + side walls, above the floor)
@@ -51,11 +52,27 @@ export const WALL_STYLES: WallStyle[] = [
   "grid",
 ];
 
+// One-click item sizes (width × length, mm). A4 is the default; the rest are common things you might
+// want an open-front stacking tray for. Picking one only sets the two dimensions — clearance, front
+// overhang and everything else stay as the user has them.
+export type ItemPreset = { name: string; width: number; length: number };
+
+export const ITEM_PRESETS: ItemPreset[] = [
+  { name: "A4 paper", width: 210, length: 297 },
+  { name: "US Letter", width: 216, length: 279 },
+  { name: "A5", width: 148, length: 210 },
+  { name: "Postcard (A6)", width: 105, length: 148 },
+  { name: "4×6 photo", width: 102, length: 152 },
+  { name: "Index card (3×5)", width: 76, length: 127 },
+  { name: "#10 envelope", width: 105, length: 241 },
+  { name: "Business card", width: 51, length: 89 },
+];
+
 export const defaults: Params = {
-  a4Width: 210,
-  a4Length: 297,
+  itemWidth: 210,
+  itemLength: 297, // A4 paper by default
   clearance: 10,
-  capture: 238, // ~80% of A4 length
+  frontOverhang: 59, // ~20% of A4 overhangs the open front (the rest, ~80%, is held)
   wall: 2.4,
   floor: 3.0, // a bit thicker so the stacking groove leaves solid floor above it
   depth: 45,
@@ -83,11 +100,15 @@ export type Dims = {
   H: number;
 };
 
-// Derived footprint. The interior is a vertical prism (A4 + clearance) so paper slides in cleanly;
-// only the rear gets clearance because the front is open.
+// Derived footprint. Width always gives the item one clearance on each side. Length: the back wall
+// sits one clearance behind the item; the front depends on the overhang — at 0 the item is fully
+// enclosed and the front gets its own clearance too (so `clearance` reads as the same fit gap on every
+// wall), and at >0 the item overhangs the open front, where there's nothing to clear against. The
+// max() guards the degenerate corner (clearance 0 + overhang == itemLength) from a non-positive length.
 export function dims(p: Params): Dims {
-  const innerW = p.a4Width + 2 * p.clearance;
-  const innerL = p.capture + p.clearance;
+  const innerW = p.itemWidth + 2 * p.clearance;
+  const frontGap = p.frontOverhang > 0 ? 0 : p.clearance; // enclosed front earns a clearance; open doesn't
+  const innerL = Math.max(p.itemLength - p.frontOverhang + p.clearance + frontGap, 8);
   const outerW = innerW + 2 * p.wall;
   const outerL = innerL + 2 * p.wall;
   const H = p.floor + p.depth;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>A4 tray — 3D-printed parametric preview</title>
+    <title>Stackable tray — 3D-printed parametric preview</title>
     <style>
       :root {
         color-scheme: light;
@@ -215,11 +215,17 @@
   <body>
     <div id="app"></div>
     <div id="panel">
-      <h1>A4 tray — 3D print</h1>
+      <h1>Stackable tray — 3D print</h1>
       <p class="sub">Parametric, open-front, stackable · sized for Bambu Lab beds</p>
 
       <section class="group">
         <h2>Size &amp; fit</h2>
+        <label class="sel"
+          >Item preset
+          <select id="itemPreset">
+            <option value="">Custom…</option>
+          </select>
+        </label>
         <div class="rows" data-group="size"></div>
       </section>
 
@@ -296,7 +302,7 @@
             <option value="TPU">TPU</option>
           </select>
         </label>
-        <label class="toggle"><input id="showPaper" type="checkbox" checked /> Show A4 sheet</label>
+        <label class="toggle"><input id="showItem" type="checkbox" checked /> Show item</label>
         <label class="toggle"><input id="showStack" type="checkbox" /> Show stack (×3)</label>
       </section>
 

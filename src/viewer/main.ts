@@ -1,6 +1,6 @@
-// App entry: holds the params, builds the tray mesh (+ stack preview + A4 sheet), and wires the UI
-// to the geometry. The preview and the exported STL come from the same buildTray() so they can never
-// drift. Scene/render plumbing lives in scene.ts; the readout and sliders in their own modules.
+// App entry: holds the params, builds the tray mesh (+ stack preview + item placeholder), and wires
+// the UI to the geometry. The preview and the exported STL come from the same buildTray() so they can
+// never drift. Scene/render plumbing lives in scene.ts; the readout and sliders in their own modules.
 
 import {
   BoxGeometry,
@@ -15,7 +15,7 @@ import { STLExporter } from "three/addons/exporters/STLExporter.js";
 import wasmUrl from "manifold-3d/manifold.wasm?url";
 import { initCSG } from "../csg.ts";
 import { buildLabelClip } from "../label.ts";
-import { defaults, dims, type Params } from "../params.ts";
+import { defaults, dims, ITEM_PRESETS, type Params } from "../params.ts";
 import { buildTray, labelRailPlacement } from "../tray.ts";
 import { buildControls } from "./controls.ts";
 import { createReadout } from "./readout.ts";
@@ -76,8 +76,9 @@ for (const m of Object.values(clips)) {
   viewer.scene.add(m);
 }
 
-// Translucent A4 sheet: shows how much of the page the tray holds vs. what overhangs the open front.
-const paperMat = new MeshStandardMaterial({
+// Translucent item placeholder: shows how much of the item the tray holds vs. what overhangs the open
+// front (or, when enclosed, the clearance gap all around).
+const itemMat = new MeshStandardMaterial({
   color: 0xf7f4e8,
   roughness: 0.95,
   metalness: 0,
@@ -85,19 +86,36 @@ const paperMat = new MeshStandardMaterial({
   opacity: 0.5,
   side: DoubleSide,
 });
-const paper = new Mesh(new BoxGeometry(1, 1, 1), paperMat);
-paper.renderOrder = 1;
-viewer.scene.add(paper);
+const item = new Mesh(new BoxGeometry(1, 1, 1), itemMat);
+item.renderOrder = 1;
+viewer.scene.add(item);
 
 // --- UI elements ------------------------------------------------------------
-const paperToggle = document.getElementById("showPaper") as HTMLInputElement;
+const itemToggle = document.getElementById("showItem") as HTMLInputElement;
 const showStackToggle = document.getElementById("showStack") as HTMLInputElement;
+const itemPresetSel = document.getElementById("itemPreset") as HTMLSelectElement;
 const wallStyleSel = document.getElementById("wallStyle") as HTMLSelectElement;
 const floorStyleSel = document.getElementById("floorStyle") as HTMLSelectElement;
 const materialSel = document.getElementById("material") as HTMLSelectElement;
 const ridgeToggle = document.getElementById("stackRidge") as HTMLInputElement;
 const labelSel = document.getElementById("labelRail") as HTMLSelectElement;
 const downloadClipBtn = document.getElementById("downloadClip") as HTMLButtonElement;
+
+// Populate the item-preset dropdown from the single source of truth (params.ts). "Custom…" (value "")
+// stays selected whenever the dimensions don't match a preset.
+for (const preset of ITEM_PRESETS) {
+  const opt = document.createElement("option");
+  opt.value = preset.name;
+  opt.textContent = preset.name;
+  itemPresetSel.append(opt);
+}
+function syncPreset(): void {
+  const match = ITEM_PRESETS.find(
+    (p) => p.width === params.itemWidth && p.length === params.itemLength,
+  );
+  itemPresetSel.value = match ? match.name : "";
+}
+
 wallStyleSel.value = params.wallStyle;
 floorStyleSel.value = params.floorStyle;
 ridgeToggle.checked = params.stackRidge; // reflect a restored value (HTML defaults to checked)
@@ -111,15 +129,16 @@ const readout = createReadout({
   getGeometry: () => mesh.geometry,
 });
 
-function updatePaper(): void {
+function updateItem(): void {
   const d = dims(params);
-  const t = 1.5; // visual sheet thickness
-  paper.geometry.dispose();
-  paper.geometry = new BoxGeometry(params.a4Width, params.a4Length, t);
-  // rear edge sits one clearance in front of the back wall; the sheet runs forward and overhangs
+  const t = 1.5; // visual item thickness
+  item.geometry.dispose();
+  item.geometry = new BoxGeometry(params.itemWidth, params.itemLength, t);
+  // rear edge sits one clearance in front of the back wall; the item runs forward — overhanging the
+  // open front when frontOverhang > 0, or sitting a clearance inside it when enclosed.
   const yBack = d.innerL / 2 - params.clearance;
-  paper.position.set(0, yBack - params.a4Length / 2, params.floor + t / 2 + 0.4);
-  paper.visible = paperToggle.checked;
+  item.position.set(0, yBack - params.itemLength / 2, params.floor + t / 2 + 0.4);
+  item.visible = itemToggle.checked;
 }
 
 // View-only: render two extra trays nested on top. Vertical pitch = tray height H, so the upper
@@ -156,9 +175,10 @@ function rebuild(persist = true): void {
   const old = mesh.geometry;
   mesh.geometry = creased(buildTray(params));
   old.dispose();
-  updatePaper();
+  updateItem();
   updateStack();
   updateClip();
+  syncPreset(); // reflect item dims changed via the sliders (drops to "Custom…" when off-preset)
   readout(params);
   viewer.invalidate();
 }
@@ -177,9 +197,20 @@ function scheduleRebuild(): void {
 const sliders = buildControls(params, scheduleRebuild);
 
 // --- event wiring -----------------------------------------------------------
-paperToggle.addEventListener("change", () => {
-  updatePaper();
+itemToggle.addEventListener("change", () => {
+  updateItem();
   viewer.invalidate();
+});
+// Picking a preset sets only the two item dimensions; clamp the overhang to the new length, then push
+// everything back into the sliders and rebuild.
+itemPresetSel.addEventListener("change", () => {
+  const preset = ITEM_PRESETS.find((p) => p.name === itemPresetSel.value);
+  if (!preset) return; // "Custom…" — leave the current dimensions alone
+  params.itemWidth = preset.width;
+  params.itemLength = preset.length;
+  params.frontOverhang = Math.min(params.frontOverhang, params.itemLength);
+  sliders.sync();
+  rebuild();
 });
 showStackToggle.addEventListener("change", () => {
   updateStack();
@@ -209,9 +240,10 @@ document.getElementById("download")!.addEventListener("click", () => {
   const data = exporter.parse(new Mesh(mesh.geometry), { binary: true });
   const blob = new Blob([data], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
+  const d = dims(params);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `a4-tray-${Math.round(params.capture)}deep.stl`;
+  a.download = `tray-${Math.round(d.outerW)}x${Math.round(d.outerL)}mm.stl`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 });
@@ -225,7 +257,7 @@ downloadClipBtn.addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "a4-tray-label-clip.stl";
+  a.download = "tray-label-clip.stl";
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 });
@@ -245,8 +277,9 @@ document.getElementById("reset")!.addEventListener("click", () => {
 });
 
 // --- go ---------------------------------------------------------------------
-updatePaper();
+updateItem();
 updateClip(); // place + show the clip preview if labelRail was restored on (rebuild isn't run yet)
+syncPreset(); // reflect restored item dims in the preset dropdown
 readout(params);
 viewer.frameCamera(visibleObjects());
 viewer.start();

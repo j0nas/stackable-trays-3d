@@ -18,13 +18,26 @@ type Ctrl = {
 };
 
 const CONTROLS: Ctrl[] = [
-  // Size & fit
-  { key: "capture", label: "Tray depth (footprint)", min: 150, max: 297, step: 1, group: "size" },
-  { key: "clearance", label: "Clearance / side", min: 0, max: 20, step: 0.5, group: "size" },
-  // Front lip runs 0 (open) … wall height (full closed front), so cap it at the wall height.
+  // Size & fit — what you hold, the fit gap, then the front treatment
+  { key: "itemWidth", label: "Item width", min: 40, max: 400, step: 1, group: "size" },
+  { key: "itemLength", label: "Item length", min: 40, max: 400, step: 1, group: "size" },
+  { key: "clearance", label: "Clearance", min: 0, max: 20, step: 0.5, group: "size" },
+  // Front overhang: how far the item sticks out the open front. 0 = fully enclosed (front earns its
+  // own clearance), so it can't exceed the item length.
+  {
+    key: "frontOverhang",
+    label: "Front overhang (0 = enclosed)",
+    min: 0,
+    max: 400,
+    step: 1,
+    group: "size",
+    maxKey: "itemLength",
+  },
+  // Front lip is vertical (front-wall height), independent of the overhang: 0 (open top) … wall height
+  // (full closed front), so cap it at the wall height.
   {
     key: "frontLip",
-    label: "Front lip (0 = open)",
+    label: "Front lip (0 = open top)",
     min: 0,
     max: 90,
     step: 1,
