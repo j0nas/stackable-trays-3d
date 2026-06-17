@@ -197,7 +197,16 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
     const fW = innerW - 2 * m;
     const fL = innerL - 2 * m;
     if (fW > 12 && fL > 12) {
-      const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
+      // Floor asks for a decorative border so voronoi/louvres frame cleanly (its open front has no
+      // wall to mask cells running off the edge). Walls pass none — see the wall branch above.
+      const c = wallShapes(
+        p.floorStyle,
+        fW,
+        fL,
+        3,
+        p.floorPatternScale,
+        frame(p.floorPatternScale),
+      );
       let win = s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, 0, -1);
       // Reserve a solid frame around the scoop: bite the (dilated) scoop out of the floor window so the
       // floor stays solid there; cutScoop later removes the un-dilated notch, leaving a clean border

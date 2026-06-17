@@ -1,26 +1,40 @@
 // Wall/floor lightening patterns: each generator returns a set of 2D cell shapes in local
 // (u = along the span, v = vertical) coordinates, which the tray builder bakes into a single
-// perforated panel. Cell SIZE is `size` (the pattern-scale slider); the caller handles the margin by
-// passing an already-inset span. Keeping these here keeps tray.ts focused on the solid assembly.
+// perforated panel. Cell SIZE is `size` (the pattern-scale slider); the caller handles the region
+// margin by passing an already-inset span. Keeping these here keeps tray.ts focused on the solid
+// assembly.
+//
+// The lattice styles (holes, grid, diamond, honeycomb) inset their cell centres to fit whole cells, so
+// they leave a clean solid border within their span for free. The edge-filling styles (voronoi,
+// louvres) instead run right to the span edge, so the caller asks them for a decorative `border` where
+// one is wanted — chiefly the floor, whose open front has no wall to hide cells spilling off the edge.
+// Walls already get a border from their window margins, so they ask for none (border = 0). Critically
+// that border is the CALLER's call, not a fixed inset baked in here: a size-relative inset applied
+// blind to every span is what once collapsed the short walls. `fitBorder` is the backstop — it never
+// lets a border eat a span down to nothing.
 
 import { Shape } from "three";
 import { Delaunay } from "d3-delaunay";
 import type { WallStyle } from "./params.ts";
 import { circleShape, polyShape, rectShape } from "./shapes.ts";
 
-// Solid frame kept between the outermost cells and the span edge. The lattice styles (holes, grid,
-// diamond, honeycomb) inset their cell centres so they leave this border naturally; the edge-filling
-// styles (voronoi, louvres) would otherwise run right to the span edge — most visibly on the open
-// floor front, which has no wall to mask it — so they shrink their field by this much to match. About
-// half a cell reads as a deliberate frame at any scale.
+// The decorative border to ask an edge-filling style (voronoi, louvres) to keep — ~half a cell reads
+// as a deliberate frame at any scale. The caller passes this for the floor; walls pass nothing.
 export function frame(size: number): number {
   return size * 0.5 + 1;
 }
 
-function louvreShapes(wLen: number, hLen: number, size: number): Shape[] {
-  const b = frame(size);
+// Clamp a requested border so a usable field always survives, even on a short span (a low wall): never
+// negative, and never so big it leaves less than one `cell` across the smaller dimension. This is the
+// guard that keeps a size-relative border from silently collapsing a small region to no pattern.
+function fitBorder(border: number, wLen: number, hLen: number, cell: number): number {
+  return Math.max(0, Math.min(border, (Math.min(wLen, hLen) - cell) / 2));
+}
+
+function louvreShapes(wLen: number, hLen: number, size: number, border: number): Shape[] {
+  const b = fitBorder(border, wLen, hLen, size);
   const usableW = wLen - 2 * b;
-  const slotH = hLen - 2 * b; // keep a border at the slot ends (the floor front/back edge)
+  const slotH = hLen - 2 * b; // border at the slot ends too (e.g. the floor front/back edge)
   const slotW = size;
   const gap = size * 0.85;
   const n = Math.floor((usableW + gap) / (slotW + gap));
@@ -98,14 +112,23 @@ function insetConvexRing(ring: [number, number][], d: number): [number, number][
   return poly;
 }
 
-function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
+function voronoiShapes(
+  wLen: number,
+  hLen: number,
+  seedIdx: number,
+  size: number,
+  border: number,
+): Shape[] {
   const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
   const strut = 2.2; // fixed wall between cells, matching the lattice patterns (printable minimum)
-  // Shrink the field to leave a solid frame; the box clip then bounds the cells to this inner rect.
-  const b = frame(size);
+  // Shrink the field by the (clamped) border; the box clip then bounds the cells to this inner rect.
+  const b = fitBorder(border, wLen, hLen, spacing);
   const iw = wLen - 2 * b;
   const ih = hLen - 2 * b;
-  if (iw < spacing || ih < spacing) return []; // too small to perforate inside a border
+  // Bail only when there's genuinely no room for one strutted cell — NOT merely "smaller than a cell".
+  // Returning [] for a short-but-usable field is what made voronoi walls vanish; let it fit fewer,
+  // box-clipped cells instead.
+  if (iw < strut * 3 || ih < strut * 3) return [];
   const n = Math.max(5, Math.round((iw * ih) / (spacing * spacing)));
   const rand = rng(1234 + seedIdx * 97);
   const pts: [number, number][] = Array.from({ length: n }, () => [
@@ -194,20 +217,23 @@ function gridShapes(wLen: number, hLen: number, size: number): Shape[] {
   );
 }
 
-// The cells for a given style over a `wLen × hLen` span (already inset by the margin). `seedIdx`
-// keeps each region's voronoi distinct but stable. "solid" returns none (the caller skips it).
+// The cells for a given style over a `wLen × hLen` span (already inset by the region margin). `seedIdx`
+// keeps each region's voronoi distinct but stable. `border` is the extra decorative frame for the
+// edge-filling styles (voronoi, louvres); the lattice styles leave their own and ignore it. Defaults
+// to 0 (walls), so only callers that want a frame (the floor) opt in. "solid" returns none.
 export function wallShapes(
   style: WallStyle,
   wLen: number,
   hLen: number,
   seedIdx: number,
   size: number,
+  border = 0,
 ): Shape[] {
   switch (style) {
     case "louvres":
-      return louvreShapes(wLen, hLen, size);
+      return louvreShapes(wLen, hLen, size, border);
     case "voronoi":
-      return voronoiShapes(wLen, hLen, seedIdx, size);
+      return voronoiShapes(wLen, hLen, seedIdx, size, border);
     case "honeycomb":
       return honeycombShapes(wLen, hLen, size);
     case "diamond":
