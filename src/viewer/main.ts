@@ -208,7 +208,10 @@ itemPresetSel.addEventListener("change", () => {
   if (!preset) return; // "Custom…" — leave the current dimensions alone
   params.itemWidth = preset.width;
   params.itemLength = preset.length;
-  params.frontOverhang = Math.min(params.frontOverhang, params.itemLength);
+  // A preset means "a tray that fully holds this item", so enclose it: overhang 0 leaves the item
+  // sitting inside the footprint with clearance on every side. The open-front overhang stays a
+  // deliberate manual tweak the user opts into afterwards via the Front overhang slider.
+  params.frontOverhang = 0;
   sliders.sync();
   rebuild();
 });

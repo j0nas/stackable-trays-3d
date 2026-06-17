@@ -53,8 +53,9 @@ export const WALL_STYLES: WallStyle[] = [
 ];
 
 // One-click item sizes (width × length, mm). A4 is the default; the rest are common things you might
-// want an open-front stacking tray for. Picking one only sets the two dimensions — clearance, front
-// overhang and everything else stay as the user has them.
+// want an open-front stacking tray for. Picking one sets the two dimensions AND encloses the item
+// (front overhang → 0) so the preset reads as "a tray that fully holds this"; everything else
+// (clearance, wall height, styles, …) is left as the user has it.
 export type ItemPreset = { name: string; width: number; length: number };
 
 export const ITEM_PRESETS: ItemPreset[] = [
