@@ -1,47 +1,26 @@
 // Wall/floor lightening patterns: each generator returns a set of 2D cell shapes in local
 // (u = along the span, v = vertical) coordinates, which the tray builder bakes into a single
-// perforated panel. Cell SIZE is `size` (the pattern-scale slider); the caller handles the region
-// margin by passing an already-inset span. Keeping these here keeps tray.ts focused on the solid
-// assembly.
+// perforated panel. Cell SIZE is `size` (the pattern-scale slider).
 //
-// The lattice styles (holes, grid, diamond, honeycomb) inset their cell centres to fit whole cells, so
-// they leave a clean solid border within their span for free. The edge-filling styles (voronoi,
-// louvres) instead run right to the span edge, so the caller asks them for a decorative `border` where
-// one is wanted — chiefly the floor, whose open front has no wall to hide cells spilling off the edge.
-// Walls already get a border from their window margins, so they ask for none (border = 0). Critically
-// that border is the CALLER's call, not a fixed inset baked in here: a size-relative inset applied
-// blind to every span is what once collapsed the short walls. `fitBorder` is the backstop — it never
-// lets a border eat a span down to nothing.
+// The border is the CALLER's job: it passes an already-inset span, inset by the "Pattern margin" from
+// the region's true edges, and the cells just fill whatever span they're given. So the margin reads as
+// the same border whether it's a wall or the floor — there's no per-style or per-region inset hidden
+// here. (A size-relative inset baked in here is what once collapsed the short walls; keeping the
+// generators "fill the span" and letting the caller own the margin is what prevents that.)
 
 import { Shape } from "three";
 import { Delaunay } from "d3-delaunay";
 import type { WallStyle } from "./params.ts";
 import { circleShape, polyShape, rectShape } from "./shapes.ts";
 
-// The decorative border to ask an edge-filling style (voronoi, louvres) to keep — ~half a cell reads
-// as a deliberate frame at any scale. The caller passes this for the floor; walls pass nothing.
-export function frame(size: number): number {
-  return size * 0.5 + 1;
-}
-
-// Clamp a requested border so a usable field always survives, even on a short span (a low wall): never
-// negative, and never so big it leaves less than one `cell` across the smaller dimension. This is the
-// guard that keeps a size-relative border from silently collapsing a small region to no pattern.
-function fitBorder(border: number, wLen: number, hLen: number, cell: number): number {
-  return Math.max(0, Math.min(border, (Math.min(wLen, hLen) - cell) / 2));
-}
-
-function louvreShapes(wLen: number, hLen: number, size: number, border: number): Shape[] {
-  const b = fitBorder(border, wLen, hLen, size);
-  const usableW = wLen - 2 * b;
-  const slotH = hLen - 2 * b; // border at the slot ends too (e.g. the floor front/back edge)
+function louvreShapes(wLen: number, hLen: number, size: number): Shape[] {
   const slotW = size;
   const gap = size * 0.85;
-  const n = Math.floor((usableW + gap) / (slotW + gap));
-  if (n < 1 || slotH <= 1) return [];
+  const n = Math.floor((wLen + gap) / (slotW + gap));
+  if (n < 1) return [];
   const used = n * slotW + (n - 1) * gap;
   return Array.from({ length: n }, (_, i) =>
-    rectShape(-used / 2 + slotW / 2 + i * (slotW + gap), 0, slotW, slotH),
+    rectShape(-used / 2 + slotW / 2 + i * (slotW + gap), 0, slotW, hLen),
   );
 }
 
@@ -112,30 +91,20 @@ function insetConvexRing(ring: [number, number][], d: number): [number, number][
   return poly;
 }
 
-function voronoiShapes(
-  wLen: number,
-  hLen: number,
-  seedIdx: number,
-  size: number,
-  border: number,
-): Shape[] {
+function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
   const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
   const strut = 2.2; // fixed wall between cells, matching the lattice patterns (printable minimum)
-  // Shrink the field by the (clamped) border; the box clip then bounds the cells to this inner rect.
-  const b = fitBorder(border, wLen, hLen, spacing);
-  const iw = wLen - 2 * b;
-  const ih = hLen - 2 * b;
-  // Bail only when there's genuinely no room for one strutted cell — NOT merely "smaller than a cell".
-  // Returning [] for a short-but-usable field is what made voronoi walls vanish; let it fit fewer,
-  // box-clipped cells instead.
-  if (iw < strut * 3 || ih < strut * 3) return [];
-  const n = Math.max(5, Math.round((iw * ih) / (spacing * spacing)));
+  // Fill the given (already margin-inset) span. Bail only when there's genuinely no room for one
+  // strutted cell — NOT merely "smaller than a cell"; returning [] for a short-but-usable field is what
+  // once made voronoi walls vanish. Let it fit fewer, box-clipped cells instead.
+  if (wLen < strut * 3 || hLen < strut * 3) return [];
+  const n = Math.max(5, Math.round((wLen * hLen) / (spacing * spacing)));
   const rand = rng(1234 + seedIdx * 97);
   const pts: [number, number][] = Array.from({ length: n }, () => [
-    (rand() - 0.5) * iw,
-    (rand() - 0.5) * ih,
+    (rand() - 0.5) * wLen,
+    (rand() - 0.5) * hLen,
   ]);
-  const voro = Delaunay.from(pts).voronoi([-iw / 2, -ih / 2, iw / 2, ih / 2]);
+  const voro = Delaunay.from(pts).voronoi([-wLen / 2, -hLen / 2, wLen / 2, hLen / 2]);
   const shapes: Shape[] = [];
   for (let i = 0; i < n; i++) {
     const poly = voro.cellPolygon(i);
@@ -217,23 +186,21 @@ function gridShapes(wLen: number, hLen: number, size: number): Shape[] {
   );
 }
 
-// The cells for a given style over a `wLen × hLen` span (already inset by the region margin). `seedIdx`
-// keeps each region's voronoi distinct but stable. `border` is the extra decorative frame for the
-// edge-filling styles (voronoi, louvres); the lattice styles leave their own and ignore it. Defaults
-// to 0 (walls), so only callers that want a frame (the floor) opt in. "solid" returns none.
+// The cells for a given style over a `wLen × hLen` span (already inset by the region margin, so the
+// margin reads as the same border on walls and floor). `seedIdx` keeps each region's voronoi distinct
+// but stable. "solid" returns none (the caller skips it).
 export function wallShapes(
   style: WallStyle,
   wLen: number,
   hLen: number,
   seedIdx: number,
   size: number,
-  border = 0,
 ): Shape[] {
   switch (style) {
     case "louvres":
-      return louvreShapes(wLen, hLen, size, border);
+      return louvreShapes(wLen, hLen, size);
     case "voronoi":
-      return voronoiShapes(wLen, hLen, seedIdx, size, border);
+      return voronoiShapes(wLen, hLen, seedIdx, size);
     case "honeycomb":
       return honeycombShapes(wLen, hLen, size);
     case "diamond":

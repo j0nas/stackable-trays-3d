@@ -16,7 +16,7 @@ import type { BufferGeometry, Shape } from "three";
 import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
 import { RAIL } from "./label.ts";
 import { type Dims, dims, type LabelSide, type Params } from "./params.ts";
-import { frame, wallShapes } from "./patterns.ts";
+import { wallShapes } from "./patterns.ts";
 import { perforatedPanel, rectShape, ringShape, roundedRect } from "./shapes.ts";
 
 // A loop with a tapered (chamfered) cross-section: a stack of thin ring slices that shrink from
@@ -194,34 +194,30 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
   // so it stays solid). Holes are vertical through-cuts in a flat plate — no bridging.
   if (p.floorStyle !== "solid") {
     const m = p.floorPatternMargin;
+    // Inset the window by m from the floor's TRUE edges, so the margin reads as the actual border, the
+    // same as the walls. The open front pulls the floor's front edge back, so measure the front from
+    // there — a window centred on the footprint would leave only m−2 at the front (nothing at m=2).
+    const open = Math.min(p.frontLip, p.depth) < 0.05;
+    const frontEdge = open ? floorFrontY(p, d, true) : -innerL / 2;
+    const fFront = frontEdge + m;
+    const fBack = innerL / 2 - m;
     const fW = innerW - 2 * m;
-    const fL = innerL - 2 * m;
+    const fL = fBack - fFront;
+    const fcy = (fFront + fBack) / 2; // window centre (off origin once the open front shortens it)
     if (fW > 12 && fL > 12) {
-      // Floor asks for a decorative border so voronoi/louvres frame cleanly (its open front has no
-      // wall to mask cells running off the edge). Walls pass none — see the wall branch above.
-      const c = wallShapes(
-        p.floorStyle,
-        fW,
-        fL,
-        3,
-        p.floorPatternScale,
-        frame(p.floorPatternScale),
-      );
-      let win = s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, 0, -1);
-      // Reserve a solid frame around the scoop: bite the (dilated) scoop out of the floor window so the
-      // floor stays solid there; cutScoop later removes the un-dilated notch, leaving a clean border
-      // instead of stray cut-off cell ends along the scoop edge. Holes left in the added panel here
-      // sit over still-solid floor, so they fill in. Dilate by the margin + the field frame so the
-      // scoop's border matches the perimeter border: `m` is the window inset and `frame()` is the
-      // extra field shrink, neither of which the interior scoop edge gets for free.
+      const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
+      let win = s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, fcy, -1);
+      // Reserve the same m border around the scoop: bite the m-dilated scoop out of the window so the
+      // floor stays solid there; cutScoop later removes the un-dilated notch, leaving an m border (matching
+      // the perimeter) instead of stray cut-off cell ends along the scoop edge. Holes left in the re-added
+      // panel here sit over still-solid floor, so they fill in.
       const sc = scoopDims(p, d);
       if (sc) {
-        const b = m + frame(p.floorPatternScale);
-        const pad = roundedRect(sc.w + 2 * b, sc.sd * 2 + 2 * b, sc.r + b, true);
+        const pad = roundedRect(sc.w + 2 * m, sc.sd * 2 + 2 * m, sc.r + m, true);
         win = s.sub(win, s.move(s.extrude(pad, p.floor + 4), 0, sc.fy, -2));
       }
       windows.push(win);
-      panels.push(s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8)); // z = 0 .. floor
+      panels.push(s.move(s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8), 0, fcy, 0));
     }
   }
 

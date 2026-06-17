@@ -54,8 +54,8 @@ Grouped in the panel: **Size & fit** (footprint, clearance, front lip, front sco
 **Walls** (height, thickness, corner radius, style, pattern size + margin) ·
 **Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge height/width, on/off) ·
 **Label** (clip rail side + clip export) · **View & output** (material, show sheet, show stack).
-Walls and floor each have their own pattern size and margin, since the same margin reads very
-differently on a tall wall vs. the flat base.
+Walls and floor each have their own pattern size and margin so you can tune them independently; the
+margin is the solid border width and reads the same on the walls and the floor.
 
 ## How it works
 
