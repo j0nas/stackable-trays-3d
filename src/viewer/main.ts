@@ -9,8 +9,9 @@ import { buildTray } from "../tray.ts";
 import { buildControls } from "./controls.ts";
 import { createReadout } from "./readout.ts";
 import { createViewer } from "./scene.ts";
+import { clearParams, loadParams, saveParams } from "./storage.ts";
 
-const params: Params = { ...defaults };
+const params: Params = loadParams(defaults); // restore the last session's settings, if any
 
 const app = document.getElementById("app")!;
 const viewer = createViewer(app);
@@ -55,6 +56,7 @@ const materialSel = document.getElementById("material") as HTMLSelectElement;
 const ridgeToggle = document.getElementById("stackRidge") as HTMLInputElement;
 wallStyleSel.value = params.wallStyle;
 floorStyleSel.value = params.floorStyle;
+ridgeToggle.checked = params.stackRidge; // reflect a restored value (HTML defaults to checked)
 
 const readout = createReadout({
   dimsEl: document.getElementById("dims")!,
@@ -88,7 +90,8 @@ function updateStack(): void {
 
 const visibleObjects = (): Object3D[] => [mesh, ...stackMeshes.filter((m) => m.visible)];
 
-function rebuild(): void {
+function rebuild(persist = true): void {
+  if (persist) saveParams(params); // persist on every change; reset passes false so it can forget
   const old = mesh.geometry;
   mesh.geometry = buildTray(params);
   old.dispose();
@@ -146,13 +149,16 @@ document.getElementById("download")!.addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 });
 
+// Reset to defaults and forget the persisted settings, so a later reload tracks the current defaults
+// rather than a saved snapshot. rebuild(false) rebuilds without re-persisting.
 document.getElementById("reset")!.addEventListener("click", () => {
   Object.assign(params, defaults);
+  clearParams();
   sliders.sync();
   wallStyleSel.value = params.wallStyle;
   floorStyleSel.value = params.floorStyle;
   ridgeToggle.checked = params.stackRidge;
-  rebuild();
+  rebuild(false);
   viewer.frameCamera(visibleObjects());
 });
 

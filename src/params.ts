@@ -31,6 +31,17 @@ export type WallStyle =
   | "holes"
   | "grid";
 
+// Runtime list of the WallStyle union, for validating persisted/untrusted values.
+export const WALL_STYLES: WallStyle[] = [
+  "solid",
+  "louvres",
+  "voronoi",
+  "honeycomb",
+  "diamond",
+  "holes",
+  "grid",
+];
+
 export const defaults: Params = {
   a4Width: 210,
   a4Length: 297,
