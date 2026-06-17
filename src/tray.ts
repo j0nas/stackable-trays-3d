@@ -137,8 +137,67 @@ function rng(seed: number): () => number {
   };
 }
 
+// Keep the part of a convex ring on the inner side of a line through (px,py) with inward normal n.
+function clipHalfPlane(
+  poly: [number, number][],
+  px: number,
+  py: number,
+  nx: number,
+  ny: number,
+): [number, number][] {
+  const out: [number, number][] = [];
+  const side = (p: [number, number]): number => (p[0] - px) * nx + (p[1] - py) * ny;
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i];
+    const prv = poly[(i + poly.length - 1) % poly.length];
+    const dc = side(cur);
+    const dp = side(prv);
+    if (dp >= 0 !== dc >= 0) {
+      const t = dp / (dp - dc);
+      out.push([prv[0] + (cur[0] - prv[0]) * t, prv[1] + (cur[1] - prv[1]) * t]);
+    }
+    if (dc >= 0) out.push(cur);
+  }
+  return out;
+}
+
+// Erode a convex polygon inward by a fixed distance `d` (half the strut width), by intersecting the
+// inward-shifted half-plane of every edge. Returns [] if the cell is too small to survive — voronoi
+// cells are always convex, so this is exact. Using a FIXED inset (not a ratio) is what makes the
+// open area, and thus the filament estimate, respond to cell size like the lattice patterns do.
+function insetConvexRing(ring: [number, number][], d: number): [number, number][] {
+  let cx = 0;
+  let cy = 0;
+  for (const [x, y] of ring) {
+    cx += x;
+    cy += y;
+  }
+  cx /= ring.length;
+  cy /= ring.length;
+  let poly = ring;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = ring[i];
+    const [bx, by] = ring[(i + 1) % ring.length];
+    let nx = -(by - ay);
+    let ny = bx - ax;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len;
+    ny /= len;
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    if (nx * (cx - mx) + ny * (cy - my) < 0) {
+      nx = -nx; // orient the normal inward (toward the centroid)
+      ny = -ny;
+    }
+    poly = clipHalfPlane(poly, mx + nx * d, my + ny * d, nx, ny);
+    if (poly.length < 3) return [];
+  }
+  return poly;
+}
+
 function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
   const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
+  const strut = 2.2; // fixed wall between cells, matching the lattice patterns (printable minimum)
   const n = Math.max(5, Math.round((wLen * hLen) / (spacing * spacing)));
   const rand = rng(1234 + seedIdx * 97);
   const pts: [number, number][] = Array.from({ length: n }, () => [
@@ -150,23 +209,10 @@ function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number
   for (let i = 0; i < n; i++) {
     const poly = voro.cellPolygon(i);
     if (!poly || poly.length < 4) continue;
-    const ring = poly.slice(0, poly.length - 1);
-    let cx = 0;
-    let cy = 0;
-    for (const pt of ring) {
-      cx += pt[0];
-      cy += pt[1];
-    }
-    cx /= ring.length;
-    cy /= ring.length;
-    const k = 0.78; // shrink each cell toward its centroid -> strut gap between cells
+    const ring = insetConvexRing(poly.slice(0, poly.length - 1) as [number, number][], strut / 2);
+    if (ring.length < 3) continue; // cell too small to keep a printable strut -> stays solid
     const sh = new Shape();
-    ring.forEach((pt, j) => {
-      const x = cx + (pt[0] - cx) * k;
-      const y = cy + (pt[1] - cy) * k;
-      if (j === 0) sh.moveTo(x, y);
-      else sh.lineTo(x, y);
-    });
+    ring.forEach((pt, j) => (j === 0 ? sh.moveTo(pt[0], pt[1]) : sh.lineTo(pt[0], pt[1])));
     sh.closePath();
     shapes.push(sh);
   }
