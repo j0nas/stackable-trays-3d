@@ -66,18 +66,3 @@ export function dims(p: Params): Dims {
   const H = p.floor + p.depth;
   return { innerW, innerL, outerW, outerL, H };
 }
-
-// Usable horizontal print area (mm) per current Bambu Lab model, from Bambu's tech specs / wiki.
-// The H2 series list the main (left) nozzle's printable area; the dual-nozzle area is a little less.
-// A part can be rotated 90°, so it fits if its long/short sides clear the bed's long/short sides.
-export type Printer = { name: string; w: number; d: number };
-export const PRINTERS: Printer[] = [
-  { name: "A1 mini", w: 180, d: 180 },
-  { name: "A1", w: 256, d: 256 },
-  { name: "P1P", w: 256, d: 256 },
-  { name: "P1S", w: 256, d: 256 },
-  { name: "X1C", w: 256, d: 256 },
-  { name: "H2D", w: 325, d: 320 },
-  { name: "H2S", w: 325, d: 320 },
-  { name: "H2C", w: 325, d: 320 },
-];

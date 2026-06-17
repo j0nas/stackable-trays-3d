@@ -130,10 +130,32 @@
         color: #2f7d4a;
         border-color: #bfe6cb;
       }
+      .fit.mod {
+        background: #fdf0d2;
+        color: #9a7b2e;
+        border-color: #ecd39a;
+      }
       .fit.no {
         background: #f1f2f4;
         color: #aab1ba;
         text-decoration: line-through;
+      }
+      #fitsLegend {
+        align-items: center;
+        gap: 4px;
+        margin-top: 5px;
+        font-size: 10px;
+        color: #7b8794;
+      }
+      #fitsLegend .swatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 3px;
+        background: #fdf0d2;
+        border: 1px solid #ecd39a;
+      }
+      #fitsLegend a {
+        color: #5a7da8;
       }
       #download {
         margin-top: 12px;
@@ -243,6 +265,7 @@
       <button id="reset" type="button">Reset to defaults</button>
       <div id="dims"></div>
       <div id="fits"></div>
+      <div id="fitsLegend" style="display: none"></div>
       <button id="download">⬇ Download STL</button>
       <div class="hint">
         Drag to orbit · scroll to zoom · right-drag to pan. The preview and the exported STL are

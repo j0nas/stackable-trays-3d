@@ -24,7 +24,8 @@ import {
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { STLExporter } from "three/addons/exporters/STLExporter.js";
-import { defaults, dims, type Params, PRINTERS } from "../params.ts";
+import { defaults, dims, type Params } from "../params.ts";
+import { fitFor, fitTitle, PRINTERS } from "../printers.ts";
 import { buildTray } from "../tray.ts";
 
 const params: Params = { ...defaults };
@@ -263,6 +264,7 @@ showStackToggle.addEventListener("change", () => {
 // --- readout ----------------------------------------------------------------
 const dimsEl = document.getElementById("dims")!;
 const fitsEl = document.getElementById("fits")!;
+const fitsLegendEl = document.getElementById("fitsLegend")!;
 const DENSITY: Record<string, number> = { PLA: 1.24, PETG: 1.27, ABS: 1.04, TPU: 1.21 };
 
 // Solid volume of the current mesh (cm^3) via the signed-tetrahedron sum.
@@ -299,15 +301,24 @@ function updateReadout(): void {
   const grams = Math.round(meshVolumeCm3() * (DENSITY[mat] ?? 1.24));
   dimsEl.textContent = `${d.outerW.toFixed(0)} × ${d.outerL.toFixed(0)} mm · holds ${pct}% of A4 · ≈ ${grams} g ${mat} (solid)`;
 
-  // Compatibility badges: which Bambu Lab beds this footprint fits (part may rotate 90°).
+  // Compatibility badges: which Bambu Lab beds this footprint fits (part may rotate 90°). Yellow =
+  // fits the bed but only with the exclusion-zone mod; the legend below links to the Bambu wiki.
   fitsEl.replaceChildren();
+  let modUrl = "";
   for (const pr of PRINTERS) {
-    const ok = long <= Math.max(pr.w, pr.d) && short <= Math.min(pr.w, pr.d);
+    const fit = fitFor(pr, long, short);
+    if (fit === "mod" && pr.mod) modUrl = pr.mod.url;
     const badge = document.createElement("span");
-    badge.className = ok ? "fit ok" : "fit no";
+    badge.className = `fit ${fit}`;
     badge.textContent = pr.name;
-    badge.title = `${pr.name}: ${pr.w} × ${pr.d} mm — ${ok ? "fits" : "too big"}`;
+    badge.title = fitTitle(pr, fit);
     fitsEl.append(badge);
+  }
+  if (modUrl) {
+    fitsLegendEl.innerHTML = `<span class="swatch"></span> needs a <a href="${modUrl}" target="_blank" rel="noopener">bed mod</a> for full size`;
+    fitsLegendEl.style.display = "flex";
+  } else {
+    fitsLegendEl.style.display = "none";
   }
 }
 
