@@ -23,8 +23,9 @@ so it fits smaller beds.
   weight and filament. A honeycomb wall+floor roughly halves the mass.
 - **Live filament estimate** in grams and metres of 1.75 mm filament (PLA / PETG / ABS / TPU).
 - **Bambu Lab fit badges** — shows at a glance which beds the current footprint fits
-  (A1 mini · A1 · P1/X1 · H2D · H2C · H2S), accounting for 90° rotation. Amber means it fits
-  only with the P1/X1 filament-cutter [exclusion-zone mod](https://wiki.bambulab.com/en/knowledge-sharing/print-volume-limitations).
+  (A1 mini · A1/X2D · P1/P2/X1 · H2D/H2C · A2L · H2S — current 2026 lineup, grouped by bed),
+  accounting for 90° rotation. Amber means it fits only with the P1/P2/X1 filament-cutter
+  [exclusion-zone mod](https://wiki.bambulab.com/en/knowledge-sharing/print-volume-limitations).
 - **One-click binary STL export.**
 
 ## Run
