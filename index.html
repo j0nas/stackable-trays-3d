@@ -92,14 +92,16 @@
         font-size: 12px;
       }
       .sel {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr 78px 44px;
         align-items: center;
-        justify-content: space-between;
         gap: 6px;
         margin: 6px 0 2px;
         font-size: 12px;
       }
       .sel select {
+        grid-column: 2; /* sit in the range-slider column so dropdowns line up with the sliders */
+        width: 100%;
         font-size: 12px;
         padding: 2px 4px;
         border: 1px solid #ccd2da;
