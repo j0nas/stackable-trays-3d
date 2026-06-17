@@ -13,26 +13,37 @@ import { Delaunay } from "d3-delaunay";
 import { ADDITION, Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import { dims, type Params, type WallStyle } from "./params.ts";
 
-// Trace a rounded rectangle (centred on the origin, XY plane) onto a Path or Shape.
-function roundedRectInto<T extends Path>(path: T, w: number, l: number, radius: number): T {
+// Trace a rounded rectangle (centred on the origin, XY plane) onto a Path or Shape. With
+// `squareFront`, the two front corners (−Y, the open-front edge) are left square: with no front wall
+// there's nothing to round into, so a rounded corner just makes the side walls curve inward. Square
+// them and the walls run straight to the front. Same footprint either way — only the corner shape
+// changes, so dimensions and bed fit are unaffected.
+function roundedRectInto<T extends Path>(
+  path: T,
+  w: number,
+  l: number,
+  radius: number,
+  squareFront = false,
+): T {
   const hw = w / 2;
   const hl = l / 2;
   const r = Math.max(Math.min(radius, hw - 0.01, hl - 0.01), 0);
-  path.moveTo(-hw + r, -hl);
-  path.lineTo(hw - r, -hl);
-  path.absarc(hw - r, -hl + r, r, -Math.PI / 2, 0, false);
+  const fr = squareFront ? 0 : r; // front (−Y) corner radius
+  path.moveTo(-hw + fr, -hl);
+  path.lineTo(hw - fr, -hl);
+  if (fr > 0) path.absarc(hw - fr, -hl + fr, fr, -Math.PI / 2, 0, false);
   path.lineTo(hw, hl - r);
   path.absarc(hw - r, hl - r, r, 0, Math.PI / 2, false);
   path.lineTo(-hw + r, hl);
   path.absarc(-hw + r, hl - r, r, Math.PI / 2, Math.PI, false);
-  path.lineTo(-hw, -hl + r);
-  path.absarc(-hw + r, -hl + r, r, Math.PI, Math.PI * 1.5, false);
+  path.lineTo(-hw, -hl + fr);
+  if (fr > 0) path.absarc(-hw + fr, -hl + fr, fr, Math.PI, Math.PI * 1.5, false);
   path.closePath();
   return path;
 }
 
-function roundedRect(w: number, l: number, r: number): Shape {
-  return roundedRectInto(new Shape(), w, l, r);
+function roundedRect(w: number, l: number, r: number, squareFront = false): Shape {
+  return roundedRectInto(new Shape(), w, l, r, squareFront);
 }
 
 function rectShape(cx: number, cy: number, w: number, h: number): Shape {
@@ -60,9 +71,10 @@ function ringGeom(
   iL: number,
   iR: number,
   h: number,
+  squareFront = false,
 ): BufferGeometry {
-  const s = roundedRect(oW, oL, oR);
-  s.holes.push(roundedRectInto(new Path(), iW, iL, iR));
+  const s = roundedRect(oW, oL, oR, squareFront);
+  s.holes.push(roundedRectInto(new Path(), iW, iL, iR, squareFront));
   return mergeVertices(new ExtrudeGeometry(s, { depth: h, bevelEnabled: false, steps: 1 }));
 }
 
@@ -78,6 +90,7 @@ function taperedRing(
   zBottom: number,
   height: number,
   slices: number,
+  squareFront = false,
 ): BufferGeometry {
   const geos: BufferGeometry[] = [];
   const dh = height / slices;
@@ -92,6 +105,7 @@ function taperedRing(
       cL - w,
       Math.max(cr - w / 2, 0.3),
       dh + 0.08,
+      squareFront,
     );
     g.translate(0, 0, zBottom + i * dh - 0.04);
     geos.push(g);
@@ -369,15 +383,17 @@ export function buildTray(p: Params): BufferGeometry {
   const { innerW, innerL, outerW, outerL, H } = dims(p);
   const innerR = Math.max(p.cornerRadius - p.wall, 0.6);
   const frontLip = Math.min(p.frontLip, p.depth - 1); // 0 = open front; otherwise a low bump-stop
+  const open = frontLip < 0.05; // fully open front: square the front corners (no wall to round into)
   const cW = innerW + p.wall; // wall-top centreline footprint
   const cL = innerL + p.wall;
   const cr = Math.max(p.cornerRadius - p.wall / 2, 0.5); // centreline corner radius
 
-  // Solid outer body, then hollow it from the floor up and out through the open top.
-  let tray: Brush = brush(prism(roundedRect(outerW, outerL, p.cornerRadius), H));
+  // Solid outer body, then hollow it from the floor up and out through the open top. When the front
+  // is open both profiles square off their front corners so the side walls stay straight.
+  let tray: Brush = brush(prism(roundedRect(outerW, outerL, p.cornerRadius, open), H));
   tray = op(
     tray,
-    prism(roundedRect(innerW, innerL, innerR), p.depth + 1),
+    prism(roundedRect(innerW, innerL, innerR, open), p.depth + 1),
     SUBTRACTION,
     0,
     0,
@@ -393,13 +409,12 @@ export function buildTray(p: Params): BufferGeometry {
   // centres into the groove and prints as a self-supporting peak. Built as a full loop; the front
   // segment is removed by the open-front cut below.
   if (stack) {
-    tray = op(tray, taperedRing(cW, cL, cr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6), ADDITION);
+    tray = op(tray, taperedRing(cW, cL, cr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open), ADDITION);
   }
 
   // Open the front. With a lip (frontLip > 0) we only clear the wall above the lip and leave the
   // floor under it. Fully open (lip = 0) the cut goes through the floor too, so the base ends at the
   // opening instead of leaving a bare floor lip jutting out under the overhanging sheet.
-  const open = frontLip < 0.05;
   const zLow = open ? -1 : p.floor + frontLip;
   const zHigh = H + hr + 2;
   tray = op(
@@ -417,7 +432,7 @@ export function buildTray(p: Params): BufferGeometry {
     const gDepth = hr + 0.4;
     tray = op(
       tray,
-      taperedRing(cW, cL, cr, wr + 1.0, wr + 0.4, -0.1, gDepth + 0.1, 6),
+      taperedRing(cW, cL, cr, wr + 1.0, wr + 0.4, -0.1, gDepth + 0.1, 6, open),
       SUBTRACTION,
     );
   }
