@@ -292,8 +292,6 @@ export function buildTray(p: Params): BufferGeometry {
     ),
   );
 
-  tray = cutScoop(s, p, tray, d, frontLip, open);
-
   // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
   // the ridge above drops in and self-centres (self-supporting, no bridge). Inset with the ridge so
   // its outer wall leaves a solid, bed-adhering lip instead of a thin sliver.
@@ -306,6 +304,9 @@ export function buildTray(p: Params): BufferGeometry {
   }
 
   tray = applyPatterns(s, p, tray, d);
+  // Scoop last, so it also cuts through any re-added perforated floor panel — the grab notch always
+  // goes clean through the floor, whatever the floor style.
+  tray = cutScoop(s, p, tray, d, frontLip, open);
   tray = addLabelRails(s, p, tray);
 
   const geom = s.finish(tray);
