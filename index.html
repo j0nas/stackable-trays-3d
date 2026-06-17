@@ -266,11 +266,19 @@
 
       <section class="group">
         <h2>Label</h2>
-        <label class="toggle"><input id="labelRail" type="checkbox" /> Label clip rail</label>
+        <label class="sel"
+          >Label rail
+          <select id="labelRail">
+            <option value="none">None</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="both">Both</option>
+          </select>
+        </label>
         <button id="downloadClip" type="button" style="display: none">⬇ Download label clip</button>
         <p class="sub" style="margin: 6px 0 0">
-          Adds a snap-rail at the front-top of each side wall. Print the clip, drop a paper card in
-          it, and snap it on — swap the card or move the clip anytime.
+          Adds a clip rail at the front-bottom corner(s), anchored to the floor. Print the clip,
+          drop a paper card in it, and snap it on — swap the card or move the clip anytime.
         </p>
       </section>
 

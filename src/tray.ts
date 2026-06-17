@@ -12,7 +12,7 @@ import { type BufferGeometry, Path, Shape } from "three";
 import { Delaunay } from "d3-delaunay";
 import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
 import { RAIL } from "./label.ts";
-import { dims, type Params, type WallStyle } from "./params.ts";
+import { dims, type LabelSide, type Params, type WallStyle } from "./params.ts";
 
 // Trace a rounded rectangle (centred on the origin, XY plane) onto a Path or Shape. With
 // `squareFront`, the two front corners (−Y, the open-front edge) are left square: with no front wall
@@ -47,20 +47,41 @@ function roundedRect(w: number, l: number, r: number, squareFront = false): Shap
   return roundedRectInto(new Shape(), w, l, r, squareFront);
 }
 
-// Where the label-clip rails sit, so the viewer can drop a clip preview straight onto one without
-// re-deriving the geometry. Returns null when the wall is too shallow for a useful rail.
-export function labelRailPlacement(
-  p: Params,
-): { railLen: number; z: number; y: number; xRight: number } | null {
-  const { outerW, outerL, H } = dims(p);
-  const railLen = Math.min(RAIL.len, p.depth - 6);
+function railSides(side: LabelSide): ("left" | "right")[] {
+  if (side === "both") return ["left", "right"];
+  if (side === "left" || side === "right") return [side];
+  return [];
+}
+
+// Placement for the floor-anchored label rail(s), shared by the geometry (tray.ts builds the rails)
+// and the viewer (drops a clip preview onto each). Each rail is a short T-post rising from the floor's
+// front edge at a front corner — the floor is always there, unlike the front wall, which is cut away
+// on an open front or above a lip. Returns null when no side is selected or the wall is too shallow.
+export function labelRailPlacement(p: Params): {
+  railLen: number;
+  baseZ: number; // floor top = rail bottom
+  floorFrontY: number; // front edge of the floor the post bonds to
+  headY: number; // head centre Y (the clip's local origin)
+  headZ: number; // head centre Z
+  sides: ("left" | "right")[];
+  x: { left: number; right: number }; // head centre X per side
+} | null {
+  const sides = railSides(p.labelRail);
+  if (sides.length === 0) return null;
+  const { innerW, outerL } = dims(p);
+  const railLen = Math.min(RAIL.len, p.depth - 4);
   if (railLen <= 8) return null;
-  const railTop = H - 3; // kept below the wall top so a stacked tray clears the rail + clip
+  const frontLip = Math.min(p.frontLip, p.depth - 1);
+  const floorFrontY = frontLip < 0.05 ? -outerL / 2 + p.wall + 2 : -outerL / 2;
+  const xMag = innerW / 2 - RAIL.headW / 2 - 2; // keep the post over the floor, near the corner
   return {
     railLen,
-    z: railTop - railLen / 2,
-    y: -outerL / 2 - RAIL.stemY - RAIL.headT / 2, // head centre — the clip's local origin aligns here
-    xRight: outerW / 2 - p.wall / 2, // side-wall centreline
+    baseZ: p.floor,
+    floorFrontY,
+    headY: floorFrontY - RAIL.stemY - RAIL.headT / 2,
+    headZ: p.floor + railLen / 2,
+    sides,
+    x: { left: -xMag, right: xMag },
   };
 }
 
@@ -430,20 +451,21 @@ export function buildTray(p: Params): BufferGeometry {
   tray = s.sub(tray, frontCut);
 
   // Optional central grab scoop: a rounded notch on the front edge so you can pull a sheet out of a
-  // tightly stacked middle tray. It dips a front lip down to the floor and bites a thumb-scallop into
-  // the floor's front edge — so it helps whether the front is open (scallops the floor edge only) or
-  // closed with a lip (dips the lip too).
+  // tightly stacked middle tray. `scoop` is the width, `scoopDepth` how far it bites back into the
+  // floor; it removes any front lip in that span AND cuts down through the floor, so it helps whether
+  // the front is open or closed. Corners use the same `cornerRadius` as the tray body.
   const scoopW = Math.min(p.scoop, innerW - 20);
   if (scoopW > 4) {
-    const scoopDepth = Math.min(Math.max(scoopW * 0.4, 10), 20); // how far back it bites
-    const r = Math.min(scoopW, scoopDepth) * 0.45; // rounded ends, clamped to the smaller span
+    const sd = Math.min(p.scoopDepth, innerL - 30); // bite into the floor, clamped clear of the back
+    const r = Math.max(Math.min(p.cornerRadius, scoopW / 2 - 0.1, sd - 0.1), 0.5);
+    const scoopFrontY = open ? -outerL / 2 + p.wall + 2 : -outerL / 2; // the floor's front edge
     const zLow = -1;
-    const zHigh = p.floor + frontLip + 2; // clear the lip (if any); just nicks the floor when open
+    const zHigh = p.floor + frontLip + 2; // remove the lip (if any) down through the floor
     // A rounded-rect column centred on the front edge: the front half sits outside the part (cuts
-    // nothing), the rear half bites `scoopDepth` into the floor/lip. Square front corners keep the
-    // notch mouth flush with the open-front edge.
-    const profile = roundedRect(scoopW, scoopDepth * 2, r, true);
-    tray = s.sub(tray, s.move(s.extrude(profile, zHigh - zLow), 0, -outerL / 2, zLow));
+    // nothing), the rear half bites `sd` into the floor/lip. Square front corners keep the notch mouth
+    // flush with the edge; the rear corners take the rounded `cornerRadius`.
+    const profile = roundedRect(scoopW, sd * 2, r, true);
+    tray = s.sub(tray, s.move(s.extrude(profile, zHigh - zLow), 0, scoopFrontY, zLow));
   }
 
   // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
@@ -522,20 +544,32 @@ export function buildTray(p: Params): BufferGeometry {
     }
   }
 
-  // Optional snap-rails for the removable label clip: a short T-rail (stem + wider head) on the front
-  // face of each side wall, near the top. They live on the side walls, so they're present whether the
-  // front is open or closed, and stop below the wall top so a stacked tray clears the rail + clip.
-  if (p.labelRail) {
+  // Optional label-clip rails: a short T-rail (stem + wider head) rising from the floor's front edge
+  // at the chosen corner(s). Anchoring to the floor — always present — keeps the rail connected
+  // whether the front is open or closed; a wall-mounted rail floats free once the front is cut away.
+  // Each rail stays well below the wall top, so a stacked tray clears it.
+  {
     const place = labelRailPlacement(p);
     if (place) {
-      const { railLen, z, xRight } = place;
-      const yF = -outerL / 2;
+      const { railLen, baseZ, floorFrontY, headZ, x, sides } = place;
       const { stemW, stemY, headW, headT } = RAIL;
-      for (const sgn of [1, -1]) {
-        const xc = sgn * xRight;
-        // The stem overlaps 0.6 mm into the wall and 0.4 mm into the head so the union bonds solidly.
-        const stem = s.move(s.box(stemW, stemY + 1.0, railLen), xc, yF - stemY / 2 + 0.1, z);
-        const head = s.move(s.box(headW, headT, railLen), xc, yF - stemY - headT / 2, z);
+      const stemFront = floorFrontY - stemY - 0.4; // overlap the head back by 0.4 to bond
+      const stemBack = floorFrontY + 1.2; // reach into the floor for a solid weld
+      const stemZc = baseZ + (railLen - 1.5) / 2; // from ~floor−1.5 (into the floor) up to floor+railLen
+      for (const side of sides) {
+        const xc = side === "left" ? x.left : x.right;
+        const stem = s.move(
+          s.box(stemW, stemBack - stemFront, railLen + 1.5),
+          xc,
+          (stemFront + stemBack) / 2,
+          stemZc,
+        );
+        const head = s.move(
+          s.box(headW, headT, railLen),
+          xc,
+          floorFrontY - stemY - headT / 2,
+          headZ,
+        );
         tray = s.add(tray, s.union([stem, head]));
       }
     }

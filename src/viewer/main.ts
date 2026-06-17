@@ -61,14 +61,20 @@ const stackMeshes: Mesh[] = Array.from({ length: 2 }, () => {
   return m;
 });
 
-// Removable label clip preview: a separate printed part that snaps onto the front-top rail. Its
+// Removable label clip preview: a separate printed part that snaps onto a front-corner rail. Its
 // geometry is fixed (only the tray's footprint moves the rail), so build it once and just reposition.
-// A contrasting colour makes clear it's a distinct part you print and clip on.
+// One mesh per front corner — the Label dropdown shows left / right / both. A contrasting colour
+// makes clear it's a distinct part you print and clip on.
 const clipMaterial = new MeshStandardMaterial({ color: 0xe0883a, roughness: 0.72, metalness: 0 });
-const clip = new Mesh(creased(buildLabelClip()), clipMaterial);
-clip.castShadow = true;
-clip.visible = false;
-viewer.scene.add(clip);
+const clipGeometry = creased(buildLabelClip());
+const clips: Record<"left" | "right", Mesh> = { left: new Mesh(), right: new Mesh() };
+for (const m of Object.values(clips)) {
+  m.geometry = clipGeometry;
+  m.material = clipMaterial;
+  m.castShadow = true;
+  m.visible = false;
+  viewer.scene.add(m);
+}
 
 // Translucent A4 sheet: shows how much of the page the tray holds vs. what overhangs the open front.
 const paperMat = new MeshStandardMaterial({
@@ -90,12 +96,12 @@ const wallStyleSel = document.getElementById("wallStyle") as HTMLSelectElement;
 const floorStyleSel = document.getElementById("floorStyle") as HTMLSelectElement;
 const materialSel = document.getElementById("material") as HTMLSelectElement;
 const ridgeToggle = document.getElementById("stackRidge") as HTMLInputElement;
-const labelToggle = document.getElementById("labelRail") as HTMLInputElement;
+const labelSel = document.getElementById("labelRail") as HTMLSelectElement;
 const downloadClipBtn = document.getElementById("downloadClip") as HTMLButtonElement;
 wallStyleSel.value = params.wallStyle;
 floorStyleSel.value = params.floorStyle;
 ridgeToggle.checked = params.stackRidge; // reflect a restored value (HTML defaults to checked)
-labelToggle.checked = params.labelRail;
+labelSel.value = params.labelRail;
 
 const readout = createReadout({
   dimsEl: document.getElementById("dims")!,
@@ -127,19 +133,22 @@ function updateStack(): void {
   });
 }
 
-// Position the label-clip preview on the right-hand rail (its origin is the rail head centre) and
-// show it only when the rail is enabled and the wall is tall enough for it to exist.
+// Place a clip preview on each enabled front corner (origin = the rail head centre). The download
+// button shows whenever a rail exists, regardless of which corner(s).
 function updateClip(): void {
   const place = labelRailPlacement(params);
-  clip.visible = params.labelRail && place !== null;
-  downloadClipBtn.style.display = clip.visible ? "block" : "none";
-  if (place) clip.position.set(place.xRight, place.y, place.z);
+  for (const side of ["left", "right"] as const) {
+    const on = place !== null && place.sides.includes(side);
+    clips[side].visible = on;
+    if (on && place) clips[side].position.set(place.x[side], place.headY, place.headZ);
+  }
+  downloadClipBtn.style.display = place ? "block" : "none";
 }
 
 const visibleObjects = (): Object3D[] => [
   mesh,
   ...stackMeshes.filter((m) => m.visible),
-  ...(clip.visible ? [clip] : []),
+  ...Object.values(clips).filter((m) => m.visible),
 ];
 
 function rebuild(persist = true): void {
@@ -189,10 +198,10 @@ ridgeToggle.addEventListener("change", () => {
   params.stackRidge = ridgeToggle.checked;
   rebuild();
 });
-labelToggle.addEventListener("change", () => {
-  params.labelRail = labelToggle.checked;
+labelSel.addEventListener("change", () => {
+  params.labelRail = labelSel.value as Params["labelRail"];
   rebuild();
-  viewer.frameCamera(visibleObjects()); // bring the clip (or the freed-up tray) into view
+  viewer.frameCamera(visibleObjects()); // bring the clip(s) (or the freed-up tray) into view
 });
 
 document.getElementById("download")!.addEventListener("click", () => {
@@ -230,7 +239,7 @@ document.getElementById("reset")!.addEventListener("click", () => {
   wallStyleSel.value = params.wallStyle;
   floorStyleSel.value = params.floorStyle;
   ridgeToggle.checked = params.stackRidge;
-  labelToggle.checked = params.labelRail;
+  labelSel.value = params.labelRail;
   rebuild(false);
   viewer.frameCamera(visibleObjects());
 });

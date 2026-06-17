@@ -18,12 +18,13 @@ so it fits smaller beds.
 - **Open front** — sheet overhangs and stays accessible while stacked (`Front lip = 0` removes
   the front wall _and_ the floor under it, for tighter bed fitment).
 - **Front scoop** (optional) — a central grab cutout on the front edge, so you can still pull a
-  sheet out of a tightly stacked middle tray. It dips a front lip down to the floor and nicks a
-  thumb-scallop into the floor edge, so it helps whether the front is open or closed.
-- **Swappable label** (optional) — a snap-rail at the front-top of each side wall takes a small
-  printed clip with a top-loading pocket. Drop a paper card in, snap the clip on, and relabel
-  forever by swapping the card or moving the clip — nothing about the paper type is baked into the
-  tray. Present whether the front is open or closed.
+  sheet out of a tightly stacked middle tray. Adjustable width _and_ depth; it dips any front lip
+  down to the floor and bites back into the floor edge, so it helps whether the front is open or
+  closed. Its corners follow the corner-radius setting.
+- **Swappable label** (optional) — a clip rail at a front-bottom corner (**left, right, or both**),
+  anchored to the floor so it stays attached whether the front is open or closed. It takes a small
+  printed clip with a top-loading pocket: drop a paper card in, snap the clip on, and relabel forever
+  by swapping the card or moving the clip — nothing about the paper type is baked into the tray.
 - **Stackable** — a chamfered ridge on the wall tops drops into a funnel groove in the floor
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut
@@ -47,10 +48,10 @@ vp check        # format + lint + typecheck
 
 ## Controls
 
-Grouped in the panel: **Size & fit** (footprint, clearance, front lip, front scoop) ·
+Grouped in the panel: **Size & fit** (footprint, clearance, front lip, front scoop width + depth) ·
 **Walls** (height, thickness, corner radius, style, pattern size + margin) ·
 **Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge height/width, on/off) ·
-**Label** (clip rail on/off + clip export) · **View & output** (material, show sheet, show stack).
+**Label** (clip rail side + clip export) · **View & output** (material, show sheet, show stack).
 Walls and floor each have their own pattern size and margin, since the same margin reads very
 differently on a tall wall vs. the flat base.
 

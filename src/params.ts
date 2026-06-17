@@ -11,6 +11,7 @@ export type Params = {
   depth: number; // interior height (back + side walls, above the floor)
   frontLip: number; // optional low front retaining lip above the floor (0 = fully open front)
   scoop: number; // central front grab cutout width (0 = none); dips the lip + notches the floor edge
+  scoopDepth: number; // how far the scoop bites back into the floor (mm)
   cornerRadius: number; // rounded vertical outer corners
   ridgeHeight: number; // stacking ridge height (also the groove depth) — registration depth
   ridgeWidth: number; // stacking ridge thickness at its base
@@ -21,8 +22,14 @@ export type Params = {
   floorPatternScale: number; // nominal floor cell size / pitch (mm)
   floorPatternMargin: number; // solid border kept around the floor pattern (mm)
   stackRidge: boolean; // ridge on the wall tops + groove in the floor so trays nest when stacked
-  labelRail: boolean; // snap-rails at the front-top of the side walls for the removable label clip
+  labelRail: LabelSide; // which front corner(s) get a floor-anchored rail for the removable clip
 };
+
+// Which side(s) carry the label-clip rail. Anchored to the floor's front edge (always present),
+// unlike the front wall, which is cut away on an open front.
+export type LabelSide = "none" | "left" | "right" | "both";
+
+export const LABEL_SIDES: LabelSide[] = ["none", "left", "right", "both"];
 
 export type WallStyle =
   | "solid"
@@ -54,6 +61,7 @@ export const defaults: Params = {
   depth: 45,
   frontLip: 0, // fully open front by default — the sheet overhangs and you grab it there
   scoop: 0, // no grab cutout by default
+  scoopDepth: 30, // default bite if the scoop is enabled
   cornerRadius: 8,
   ridgeHeight: 1.6,
   ridgeWidth: 1.2,
@@ -64,7 +72,7 @@ export const defaults: Params = {
   floorPatternScale: 9,
   floorPatternMargin: 7, // keeps the base flange / groove ring solid
   stackRidge: true,
-  labelRail: false, // off by default — adds the clip mount + lets you export the clip
+  labelRail: "none", // off by default — pick a side to add the clip rail + export the clip
 };
 
 export type Dims = {

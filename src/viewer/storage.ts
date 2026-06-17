@@ -7,7 +7,7 @@
 // the same primitive type as the default, so nothing can inject extra keys or wrong types into
 // Params; the two style unions are then clamped to a known value. Anything off keeps the default.
 
-import { type Params, WALL_STYLES } from "../params.ts";
+import { LABEL_SIDES, type Params, WALL_STYLES } from "../params.ts";
 
 const KEY = "a4-trays:params:v1"; // bump the suffix if Params ever changes incompatibly
 
@@ -22,9 +22,11 @@ export function sanitizeParams(defaults: Params, raw: unknown): Params {
     // rejected here too and keep the default.
     if (typeof stored === typeof defaults[k]) (out[k] as unknown) = stored;
   }
-  // wallStyle/floorStyle are unions, not any string — clamp a junk value back to the default.
+  // wallStyle/floorStyle/labelRail are unions, not any string — clamp a junk value back to default.
+  // (An older stored boolean labelRail fails the typeof check above and already kept the default.)
   if (!WALL_STYLES.includes(out.wallStyle)) out.wallStyle = defaults.wallStyle;
   if (!WALL_STYLES.includes(out.floorStyle)) out.floorStyle = defaults.floorStyle;
+  if (!LABEL_SIDES.includes(out.labelRail)) out.labelRail = defaults.labelRail;
   return out;
 }
 
