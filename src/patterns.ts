@@ -8,14 +8,26 @@ import { Delaunay } from "d3-delaunay";
 import type { WallStyle } from "./params.ts";
 import { circleShape, polyShape, rectShape } from "./shapes.ts";
 
+// Solid frame kept between the outermost cells and the span edge. The lattice styles (holes, grid,
+// diamond, honeycomb) inset their cell centres so they leave this border naturally; the edge-filling
+// styles (voronoi, louvres) would otherwise run right to the span edge — most visibly on the open
+// floor front, which has no wall to mask it — so they shrink their field by this much to match. About
+// half a cell reads as a deliberate frame at any scale.
+function frame(size: number): number {
+  return size * 0.5 + 1;
+}
+
 function louvreShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const b = frame(size);
+  const usableW = wLen - 2 * b;
+  const slotH = hLen - 2 * b; // keep a border at the slot ends (the floor front/back edge)
   const slotW = size;
   const gap = size * 0.85;
-  const n = Math.floor((wLen + gap) / (slotW + gap));
-  if (n < 1) return [];
+  const n = Math.floor((usableW + gap) / (slotW + gap));
+  if (n < 1 || slotH <= 1) return [];
   const used = n * slotW + (n - 1) * gap;
   return Array.from({ length: n }, (_, i) =>
-    rectShape(-used / 2 + slotW / 2 + i * (slotW + gap), 0, slotW, hLen),
+    rectShape(-used / 2 + slotW / 2 + i * (slotW + gap), 0, slotW, slotH),
   );
 }
 
@@ -89,13 +101,18 @@ function insetConvexRing(ring: [number, number][], d: number): [number, number][
 function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
   const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
   const strut = 2.2; // fixed wall between cells, matching the lattice patterns (printable minimum)
-  const n = Math.max(5, Math.round((wLen * hLen) / (spacing * spacing)));
+  // Shrink the field to leave a solid frame; the box clip then bounds the cells to this inner rect.
+  const b = frame(size);
+  const iw = wLen - 2 * b;
+  const ih = hLen - 2 * b;
+  if (iw < spacing || ih < spacing) return []; // too small to perforate inside a border
+  const n = Math.max(5, Math.round((iw * ih) / (spacing * spacing)));
   const rand = rng(1234 + seedIdx * 97);
   const pts: [number, number][] = Array.from({ length: n }, () => [
-    (rand() - 0.5) * wLen,
-    (rand() - 0.5) * hLen,
+    (rand() - 0.5) * iw,
+    (rand() - 0.5) * ih,
   ]);
-  const voro = Delaunay.from(pts).voronoi([-wLen / 2, -hLen / 2, wLen / 2, hLen / 2]);
+  const voro = Delaunay.from(pts).voronoi([-iw / 2, -ih / 2, iw / 2, ih / 2]);
   const shapes: Shape[] = [];
   for (let i = 0; i < n; i++) {
     const poly = voro.cellPolygon(i);
