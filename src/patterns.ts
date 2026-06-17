@@ -13,7 +13,7 @@ import { circleShape, polyShape, rectShape } from "./shapes.ts";
 // styles (voronoi, louvres) would otherwise run right to the span edge — most visibly on the open
 // floor front, which has no wall to mask it — so they shrink their field by this much to match. About
 // half a cell reads as a deliberate frame at any scale.
-function frame(size: number): number {
+export function frame(size: number): number {
   return size * 0.5 + 1;
 }
 

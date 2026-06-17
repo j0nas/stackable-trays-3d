@@ -16,7 +16,7 @@ import type { BufferGeometry, Shape } from "three";
 import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
 import { RAIL } from "./label.ts";
 import { type Dims, dims, type LabelSide, type Params } from "./params.ts";
-import { wallShapes } from "./patterns.ts";
+import { frame, wallShapes } from "./patterns.ts";
 import { perforatedPanel, rectShape, ringShape, roundedRect } from "./shapes.ts";
 
 // A loop with a tapered (chamfered) cross-section: a stack of thin ring slices that shrink from
@@ -125,29 +125,32 @@ function floorFrontY(p: Params, d: Dims, open: boolean): number {
   return open ? -d.outerL / 2 + p.wall + 2 : -d.outerL / 2;
 }
 
-// Optional central grab scoop: a rounded notch on the front edge so you can pull a sheet out of a
-// tightly stacked middle tray. `scoop` is the width, `scoopDepth` how far it bites back into the
-// floor (set either to 0 to disable). It removes any front lip in that span AND cuts down through the
-// floor, so it helps whether the front is open or closed. Corners follow the body `cornerRadius`.
-function cutScoop(
-  s: Scope,
-  p: Params,
-  tray: Solid,
-  d: Dims,
-  frontLip: number,
-  open: boolean,
-): Solid {
-  const scoopW = Math.min(p.scoop, d.innerW - 20);
-  if (scoopW <= 4 || p.scoopDepth <= 0.5) return tray; // disabled (width or depth ~0)
+// Optional central grab scoop, so you can pull a sheet out of a tightly stacked middle tray. `scoop`
+// is the width, `scoopDepth` how far it bites back into the floor (set either to 0 to disable).
+// Corners follow the body `cornerRadius`. Placement + size live here so both the actual cut (cutScoop)
+// and the floor-pattern border (applyPatterns reserves a solid frame around it) agree. Returns null
+// when disabled.
+function scoopDims(p: Params, d: Dims): { w: number; sd: number; r: number; fy: number } | null {
+  const w = Math.min(p.scoop, d.innerW - 20);
+  if (w <= 4 || p.scoopDepth <= 0.5) return null; // disabled (width or depth ~0)
   const sd = Math.min(p.scoopDepth, d.innerL - 30); // bite into the floor, clamped clear of the back
-  const r = Math.max(Math.min(p.cornerRadius, scoopW / 2 - 0.1, sd - 0.1), 0.5);
+  const r = Math.max(Math.min(p.cornerRadius, w / 2 - 0.1, sd - 0.1), 0.5);
+  const open = Math.min(p.frontLip, p.depth - 1) < 0.05;
+  return { w, sd, r, fy: floorFrontY(p, d, open) };
+}
+
+// Cut the notch. It removes any front lip in that span AND cuts down through the floor, so it helps
+// whether the front is open or closed.
+function cutScoop(s: Scope, p: Params, tray: Solid, d: Dims, frontLip: number): Solid {
+  const sc = scoopDims(p, d);
+  if (!sc) return tray;
   const zLow = -1;
   const zHigh = p.floor + frontLip + 2; // remove the lip (if any) down through the floor
   // A rounded-rect column centred on the front edge: the front half sits outside the part (cuts
   // nothing), the rear half bites `sd` in. Square front corners keep the notch mouth flush with the
   // edge; the rear corners take the rounded `cornerRadius`.
-  const profile = roundedRect(scoopW, sd * 2, r, true);
-  return s.sub(tray, s.move(s.extrude(profile, zHigh - zLow), 0, floorFrontY(p, d, open), zLow));
+  const profile = roundedRect(sc.w, sc.sd * 2, sc.r, true);
+  return s.sub(tray, s.move(s.extrude(profile, zHigh - zLow), 0, sc.fy, zLow));
 }
 
 // Lightening patterns (walls + floor). Rather than booleaning every cell, we cut ONE window per
@@ -195,7 +198,18 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
     const fL = innerL - 2 * m;
     if (fW > 12 && fL > 12) {
       const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
-      windows.push(s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, 0, -1));
+      let win = s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, 0, -1);
+      // Reserve a solid frame around the scoop: bite the (dilated) scoop out of the floor window so the
+      // floor stays solid there; cutScoop later removes the un-dilated notch, leaving a clean border
+      // instead of stray cut-off cell ends along the scoop edge. Holes left in the added panel here
+      // sit over still-solid floor, so they fill in.
+      const sc = scoopDims(p, d);
+      if (sc) {
+        const b = frame(p.floorPatternScale);
+        const pad = roundedRect(sc.w + 2 * b, sc.sd * 2 + 2 * b, sc.r + b, true);
+        win = s.sub(win, s.move(s.extrude(pad, p.floor + 4), 0, sc.fy, -2));
+      }
+      windows.push(win);
       panels.push(s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8)); // z = 0 .. floor
     }
   }
@@ -306,7 +320,7 @@ export function buildTray(p: Params): BufferGeometry {
   tray = applyPatterns(s, p, tray, d);
   // Scoop last, so it also cuts through any re-added perforated floor panel — the grab notch always
   // goes clean through the floor, whatever the floor style.
-  tray = cutScoop(s, p, tray, d, frontLip, open);
+  tray = cutScoop(s, p, tray, d, frontLip);
   tray = addLabelRails(s, p, tray);
 
   const geom = s.finish(tray);
