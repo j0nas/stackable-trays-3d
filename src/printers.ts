@@ -1,8 +1,9 @@
 // Bambu Lab bed compatibility. Kept separate from the geometry/params so the printer table can grow
 // without touching the modeller. Models that share a bed are grouped into one entry; dimensions are
-// the single-nozzle horizontal printable area (a flat tray prints in one material), from Bambu's
-// tech specs / wiki. A part may rotate 90°, so it fits if its long/short sides clear the bed's
-// long/short sides.
+// the single-nozzle horizontal printable area (this tray prints in one material), from Bambu's tech
+// specs / wiki — so e.g. the H2D/H2C list each nozzle's 325×320 reach, not the 330/350 mm full plate
+// only both nozzles cover. Discontinued-but-common models (P1P, X1C/X1E) stay in, since the tool is
+// for any owner. A part may rotate 90°, so it fits if its long/short sides clear the bed's.
 
 const EXCLUSION_WIKI = "https://wiki.bambulab.com/en/knowledge-sharing/print-volume-limitations";
 
@@ -26,10 +27,10 @@ export type Printer = {
 
 export const PRINTERS: Printer[] = [
   { name: "A1 mini", w: 180, d: 180 },
-  { name: "A1", w: 256, d: 256 },
+  { name: "A1 / X2D", members: ["A1", "X2D"], w: 256, d: 256 },
   {
-    name: "P1 / X1",
-    members: ["P1P", "P1S", "X1C"],
+    name: "P1 / P2 / X1",
+    members: ["P1P", "P1S", "P2S", "X1C", "X1E"],
     w: 256,
     d: 256,
     mod: {
@@ -39,8 +40,8 @@ export const PRINTERS: Printer[] = [
       url: EXCLUSION_WIKI,
     },
   },
-  { name: "H2D", w: 325, d: 320 },
-  { name: "H2C", w: 330, d: 320 },
+  { name: "H2D / H2C", members: ["H2D", "H2C"], w: 325, d: 320 },
+  { name: "A2L", w: 330, d: 320 },
   { name: "H2S", w: 340, d: 320 },
 ];
 
