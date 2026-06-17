@@ -79,6 +79,7 @@
       }
       .row input[type="text"] {
         width: 100%;
+        box-sizing: border-box; /* fit the column exactly (matches <select>, default border-box) */
         font-size: 12px;
         padding: 1px 3px;
         border: 1px solid #ccd2da;
@@ -100,7 +101,7 @@
         font-size: 12px;
       }
       .sel select {
-        grid-column: 2; /* sit in the range-slider column so dropdowns line up with the sliders */
+        grid-column: 2 / 4; /* span the range + number columns so the right edge lines up with the inputs */
         width: 100%;
         font-size: 12px;
         padding: 2px 4px;
