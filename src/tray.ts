@@ -238,59 +238,71 @@ function circleShape(cx: number, cy: number, r: number): Shape {
   return s;
 }
 
-// Cell centres covering the usable rect; `stagger` offsets alternate rows (hex packing).
+// Maximal set of multiples of `pitch` that fit within [-half, half], centred as a *block* (so an
+// even count is allowed). Centring on a cell at the origin can only ever yield an odd, symmetric
+// count, which silently drops a row/column whenever an even number would fit — this packs the most.
+function centeredAxis(half: number, pitch: number): number[] {
+  if (half < 0 || pitch <= 0) return [];
+  const n = Math.floor((2 * half) / pitch) + 1; // how many fit edge-to-edge
+  const start = -((n - 1) * pitch) / 2; // centre the block of n
+  return Array.from({ length: n }, (_, i) => start + i * pitch);
+}
+
+// Block-centred cell centres filling the usable rect (the region inset by per-cell margin `m` so
+// whole cells stay inside, keeping a clean frame). `stagger` offsets alternate rows by half a column
+// for hex packing; an offset cell pushed past the usable width is dropped.
 function lattice(
   wLen: number,
   hLen: number,
   dx: number,
   dy: number,
   stagger: boolean,
+  m: number,
 ): [number, number][] {
-  const nx = Math.ceil(wLen / 2 / dx) + 1;
-  const ny = Math.ceil(hLen / 2 / dy) + 1;
+  const xHalf = wLen / 2 - m;
+  const yHalf = hLen / 2 - m;
+  const xs = centeredAxis(xHalf, dx);
   const pts: [number, number][] = [];
-  for (let r = -ny; r <= ny; r++) {
-    const ox = stagger && ((r % 2) + 2) % 2 === 1 ? dx / 2 : 0;
-    for (let c = -nx; c <= nx; c++) pts.push([c * dx + ox, r * dy]);
-  }
+  centeredAxis(yHalf, dy).forEach((y, ri) => {
+    const off = stagger && ri % 2 === 1 ? dx / 2 : 0;
+    for (const x of xs) {
+      const xx = x + off;
+      if (Math.abs(xx) <= xHalf + 1e-6) pts.push([xx, y]);
+    }
+  });
   return pts;
-}
-
-// Keep a cell only if it stays fully inside the usable rect (so a clean frame remains).
-function fits(p: [number, number], wLen: number, hLen: number, m: number): boolean {
-  return Math.abs(p[0]) <= wLen / 2 - m && Math.abs(p[1]) <= hLen / 2 - m;
 }
 
 function honeycombShapes(wLen: number, hLen: number, size: number): Shape[] {
   const R = size / Math.sqrt(3); // horizontal cell pitch == size
   const cutR = Math.max(R - 2.2 / Math.sqrt(3), 0.6);
-  return lattice(wLen, hLen, Math.sqrt(3) * R, 1.5 * R, true)
-    .filter((p) => fits(p, wLen, hLen, R * 0.95))
-    .map(([x, y]) => polyShape(x, y, cutR, 6, Math.PI / 2)); // pointy-top -> self-supporting
+  return lattice(wLen, hLen, Math.sqrt(3) * R, 1.5 * R, true, R * 0.95).map(([x, y]) =>
+    polyShape(x, y, cutR, 6, Math.PI / 2),
+  ); // pointy-top -> self-supporting
 }
 
 function diamondShapes(wLen: number, hLen: number, size: number): Shape[] {
   const pitch = size;
   const cutR = Math.max((pitch - 2.4) / 2, 0.6);
-  return lattice(wLen, hLen, pitch, pitch, true)
-    .filter((p) => fits(p, wLen, hLen, cutR + 0.5))
-    .map(([x, y]) => polyShape(x, y, cutR, 4, Math.PI / 2)); // 45° edges -> self-supporting
+  return lattice(wLen, hLen, pitch, pitch, true, cutR + 0.5).map(([x, y]) =>
+    polyShape(x, y, cutR, 4, Math.PI / 2),
+  ); // 45° edges -> self-supporting
 }
 
 function holesShapes(wLen: number, hLen: number, size: number): Shape[] {
   const pitch = size;
   const r = Math.max((pitch - 2.6) / 2, 0.5);
-  return lattice(wLen, hLen, pitch, pitch * 0.87, true)
-    .filter((p) => fits(p, wLen, hLen, r + 0.5))
-    .map(([x, y]) => circleShape(x, y, r));
+  return lattice(wLen, hLen, pitch, pitch * 0.87, true, r + 0.5).map(([x, y]) =>
+    circleShape(x, y, r),
+  );
 }
 
 function gridShapes(wLen: number, hLen: number, size: number): Shape[] {
   const pitch = size;
   const c = Math.max(pitch - 2.6, 0.8);
-  return lattice(wLen, hLen, pitch, pitch, false)
-    .filter((p) => fits(p, wLen, hLen, c / 2 + 0.5))
-    .map(([x, y]) => rectShape(x, y, c, c));
+  return lattice(wLen, hLen, pitch, pitch, false, c / 2 + 0.5).map(([x, y]) =>
+    rectShape(x, y, c, c),
+  );
 }
 
 function wallShapes(
