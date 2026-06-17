@@ -21,9 +21,10 @@ so it fits smaller beds.
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut
   weight and filament. A honeycomb wall+floor roughly halves the mass.
-- **Live filament estimate** in grams (PLA / PETG / ABS / TPU).
+- **Live filament estimate** in grams and metres of 1.75 mm filament (PLA / PETG / ABS / TPU).
 - **Bambu Lab fit badges** — shows at a glance which beds the current footprint fits
-  (A1 mini · A1 · P1P · P1S · X1C · H2D · H2S · H2C), accounting for 90° rotation.
+  (A1 mini · A1 · P1/X1 · H2D · H2C · H2S), accounting for 90° rotation. Amber means it fits
+  only with the P1/X1 filament-cutter [exclusion-zone mod](https://wiki.bambulab.com/en/knowledge-sharing/print-volume-limitations).
 - **One-click binary STL export.**
 
 ## Run
@@ -43,10 +44,12 @@ Grouped in the panel: **Size & fit** (depth, clearance, wall height, front lip) 
 
 ## How it works
 
-- `src/params.ts` — pure parameter types, defaults, derived dimensions, and the Bambu bed table.
+- `src/params.ts` — pure parameter types, defaults, and derived dimensions.
+- `src/printers.ts` — Bambu bed table (grouped by size) and the bed-fit / exclusion-zone-mod logic.
 - `src/tray.ts` — `Params → one watertight BufferGeometry`. Built with [three-bvh-csg](https://github.com/gkjohnson/three-bvh-csg)
   booleans (manifold output), modelled **Z-up, base on z = 0, millimetres** (slicer convention).
-- `src/viewer/main.ts` — Three.js scene, sliders, live readout, and the STL exporter.
+- `src/viewer/` — `main.ts` wires it together; `scene.ts` (renderer/camera/lights, renders on
+  demand), `readout.ts` (volume estimate + fit badges), `controls.ts` (the slider panel).
 
 ## Printing
 
