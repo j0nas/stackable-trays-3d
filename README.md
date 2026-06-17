@@ -52,7 +52,11 @@ size and margin, since the same margin reads very differently on a tall wall vs.
 - `src/tray.ts` — `Params → one watertight BufferGeometry`. Built with [three-bvh-csg](https://github.com/gkjohnson/three-bvh-csg)
   booleans (manifold output), modelled **Z-up, base on z = 0, millimetres** (slicer convention).
 - `src/viewer/` — `main.ts` wires it together; `scene.ts` (renderer/camera/lights, renders on
-  demand), `readout.ts` (volume estimate + fit badges), `controls.ts` (the slider panel).
+  demand), `readout.ts` (volume estimate + fit badges), `controls.ts` (the slider panel), and
+  `storage.ts` (localStorage persistence).
+
+Your settings are saved in the browser and restored on the next visit; **Reset to defaults** clears
+them.
 
 ## Printing
 
