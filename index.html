@@ -172,6 +172,21 @@
       #download:hover {
         background: #356a94;
       }
+      #downloadClip {
+        margin-top: 6px;
+        width: 100%;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #b15f1c;
+        background: #fbeede;
+        border: 1px solid #efcfa8;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #downloadClip:hover {
+        background: #f7e2c9;
+      }
       #reset {
         margin-top: 8px;
         padding: 3px 8px;
@@ -247,6 +262,16 @@
         <label class="toggle"
           ><input id="stackRidge" type="checkbox" checked /> Stacking ridge</label
         >
+      </section>
+
+      <section class="group">
+        <h2>Label</h2>
+        <label class="toggle"><input id="labelRail" type="checkbox" /> Label clip rail</label>
+        <button id="downloadClip" type="button" style="display: none">⬇ Download label clip</button>
+        <p class="sub" style="margin: 6px 0 0">
+          Adds a snap-rail at the front-top of each side wall. Print the clip, drop a paper card in
+          it, and snap it on — swap the card or move the clip anytime.
+        </p>
       </section>
 
       <section class="group">

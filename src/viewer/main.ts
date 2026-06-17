@@ -2,12 +2,21 @@
 // to the geometry. The preview and the exported STL come from the same buildTray() so they can never
 // drift. Scene/render plumbing lives in scene.ts; the readout and sliders in their own modules.
 
-import { BoxGeometry, DoubleSide, Mesh, MeshStandardMaterial, type Object3D } from "three";
+import {
+  BoxGeometry,
+  type BufferGeometry,
+  DoubleSide,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+} from "three";
+import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { STLExporter } from "three/addons/exporters/STLExporter.js";
 import wasmUrl from "manifold-3d/manifold.wasm?url";
 import { initCSG } from "../csg.ts";
+import { buildLabelClip } from "../label.ts";
 import { defaults, dims, type Params } from "../params.ts";
-import { buildTray } from "../tray.ts";
+import { buildTray, labelRailPlacement } from "../tray.ts";
 import { buildControls } from "./controls.ts";
 import { createReadout } from "./readout.ts";
 import { createViewer } from "./scene.ts";
@@ -20,9 +29,23 @@ await initCSG(wasmUrl); // load the Manifold (manifold-3d) WASM kernel before an
 const app = document.getElementById("app")!;
 const viewer = createViewer(app);
 
+// manifold-3d returns a properly welded mesh (shared vertices), so a plain computeVertexNormals()
+// averages normals across the sharp 90° CAD edges and the model looks soft/melted. Split the normals
+// at any edge sharper than ~30° instead: flat faces stay crisp, while the rounded corners and arcs
+// (tessellated in ~7.5° steps) still shade smoothly. Positions/triangles are untouched, so the
+// exported STL is identical. Disposes the source geometry once creased.
+const CREASE_ANGLE = Math.PI / 6; // 30°
+function creased(src: BufferGeometry): BufferGeometry {
+  const g = toCreasedNormals(src, CREASE_ANGLE);
+  src.dispose();
+  g.computeBoundingBox();
+  return g;
+}
+
 // --- meshes -----------------------------------------------------------------
-const material = new MeshStandardMaterial({ color: 0x3f8fbf, roughness: 0.45, metalness: 0 });
-const mesh = new Mesh(buildTray(params), material);
+// Matte, near-non-metallic so it reads like a printed part, not glossy plastic.
+const material = new MeshStandardMaterial({ color: 0x3f8fbf, roughness: 0.72, metalness: 0 });
+const mesh = new Mesh(creased(buildTray(params)), material);
 mesh.castShadow = true;
 mesh.receiveShadow = true;
 viewer.scene.add(mesh);
@@ -37,6 +60,15 @@ const stackMeshes: Mesh[] = Array.from({ length: 2 }, () => {
   viewer.scene.add(m);
   return m;
 });
+
+// Removable label clip preview: a separate printed part that snaps onto the front-top rail. Its
+// geometry is fixed (only the tray's footprint moves the rail), so build it once and just reposition.
+// A contrasting colour makes clear it's a distinct part you print and clip on.
+const clipMaterial = new MeshStandardMaterial({ color: 0xe0883a, roughness: 0.72, metalness: 0 });
+const clip = new Mesh(creased(buildLabelClip()), clipMaterial);
+clip.castShadow = true;
+clip.visible = false;
+viewer.scene.add(clip);
 
 // Translucent A4 sheet: shows how much of the page the tray holds vs. what overhangs the open front.
 const paperMat = new MeshStandardMaterial({
@@ -58,9 +90,12 @@ const wallStyleSel = document.getElementById("wallStyle") as HTMLSelectElement;
 const floorStyleSel = document.getElementById("floorStyle") as HTMLSelectElement;
 const materialSel = document.getElementById("material") as HTMLSelectElement;
 const ridgeToggle = document.getElementById("stackRidge") as HTMLInputElement;
+const labelToggle = document.getElementById("labelRail") as HTMLInputElement;
+const downloadClipBtn = document.getElementById("downloadClip") as HTMLButtonElement;
 wallStyleSel.value = params.wallStyle;
 floorStyleSel.value = params.floorStyle;
 ridgeToggle.checked = params.stackRidge; // reflect a restored value (HTML defaults to checked)
+labelToggle.checked = params.labelRail;
 
 const readout = createReadout({
   dimsEl: document.getElementById("dims")!,
@@ -92,15 +127,29 @@ function updateStack(): void {
   });
 }
 
-const visibleObjects = (): Object3D[] => [mesh, ...stackMeshes.filter((m) => m.visible)];
+// Position the label-clip preview on the right-hand rail (its origin is the rail head centre) and
+// show it only when the rail is enabled and the wall is tall enough for it to exist.
+function updateClip(): void {
+  const place = labelRailPlacement(params);
+  clip.visible = params.labelRail && place !== null;
+  downloadClipBtn.style.display = clip.visible ? "block" : "none";
+  if (place) clip.position.set(place.xRight, place.y, place.z);
+}
+
+const visibleObjects = (): Object3D[] => [
+  mesh,
+  ...stackMeshes.filter((m) => m.visible),
+  ...(clip.visible ? [clip] : []),
+];
 
 function rebuild(persist = true): void {
   if (persist) saveParams(params); // persist on every change; reset passes false so it can forget
   const old = mesh.geometry;
-  mesh.geometry = buildTray(params);
+  mesh.geometry = creased(buildTray(params));
   old.dispose();
   updatePaper();
   updateStack();
+  updateClip();
   readout(params);
   viewer.invalidate();
 }
@@ -140,6 +189,11 @@ ridgeToggle.addEventListener("change", () => {
   params.stackRidge = ridgeToggle.checked;
   rebuild();
 });
+labelToggle.addEventListener("change", () => {
+  params.labelRail = labelToggle.checked;
+  rebuild();
+  viewer.frameCamera(visibleObjects()); // bring the clip (or the freed-up tray) into view
+});
 
 document.getElementById("download")!.addEventListener("click", () => {
   const exporter = new STLExporter();
@@ -153,6 +207,20 @@ document.getElementById("download")!.addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 });
 
+// The label clip is a separate part. It's modelled base-down (every face is a vertical extrusion or a
+// flat ledge), so it exports ready to print flat with no supports.
+downloadClipBtn.addEventListener("click", () => {
+  const exporter = new STLExporter();
+  const data = exporter.parse(new Mesh(buildLabelClip()), { binary: true });
+  const blob = new Blob([data], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "a4-tray-label-clip.stl";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+});
+
 // Reset to defaults and forget the persisted settings, so a later reload tracks the current defaults
 // rather than a saved snapshot. rebuild(false) rebuilds without re-persisting.
 document.getElementById("reset")!.addEventListener("click", () => {
@@ -162,12 +230,14 @@ document.getElementById("reset")!.addEventListener("click", () => {
   wallStyleSel.value = params.wallStyle;
   floorStyleSel.value = params.floorStyle;
   ridgeToggle.checked = params.stackRidge;
+  labelToggle.checked = params.labelRail;
   rebuild(false);
   viewer.frameCamera(visibleObjects());
 });
 
 // --- go ---------------------------------------------------------------------
 updatePaper();
+updateClip(); // place + show the clip preview if labelRail was restored on (rebuild isn't run yet)
 readout(params);
 viewer.frameCamera(visibleObjects());
 viewer.start();

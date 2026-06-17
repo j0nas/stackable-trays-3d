@@ -11,6 +11,7 @@
 import { type BufferGeometry, Path, Shape } from "three";
 import { Delaunay } from "d3-delaunay";
 import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
+import { RAIL } from "./label.ts";
 import { dims, type Params, type WallStyle } from "./params.ts";
 
 // Trace a rounded rectangle (centred on the origin, XY plane) onto a Path or Shape. With
@@ -44,6 +45,23 @@ function roundedRectInto<T extends Path>(
 
 function roundedRect(w: number, l: number, r: number, squareFront = false): Shape {
   return roundedRectInto(new Shape(), w, l, r, squareFront);
+}
+
+// Where the label-clip rails sit, so the viewer can drop a clip preview straight onto one without
+// re-deriving the geometry. Returns null when the wall is too shallow for a useful rail.
+export function labelRailPlacement(
+  p: Params,
+): { railLen: number; z: number; y: number; xRight: number } | null {
+  const { outerW, outerL, H } = dims(p);
+  const railLen = Math.min(RAIL.len, p.depth - 6);
+  if (railLen <= 8) return null;
+  const railTop = H - 3; // kept below the wall top so a stacked tray clears the rail + clip
+  return {
+    railLen,
+    z: railTop - railLen / 2,
+    y: -outerL / 2 - RAIL.stemY - RAIL.headT / 2, // head centre — the clip's local origin aligns here
+    xRight: outerW / 2 - p.wall / 2, // side-wall centreline
+  };
 }
 
 function rectShape(cx: number, cy: number, w: number, h: number): Shape {
@@ -411,6 +429,23 @@ export function buildTray(p: Params): BufferGeometry {
   );
   tray = s.sub(tray, frontCut);
 
+  // Optional central grab scoop: a rounded notch on the front edge so you can pull a sheet out of a
+  // tightly stacked middle tray. It dips a front lip down to the floor and bites a thumb-scallop into
+  // the floor's front edge — so it helps whether the front is open (scallops the floor edge only) or
+  // closed with a lip (dips the lip too).
+  const scoopW = Math.min(p.scoop, innerW - 20);
+  if (scoopW > 4) {
+    const scoopDepth = Math.min(Math.max(scoopW * 0.4, 10), 20); // how far back it bites
+    const r = Math.min(scoopW, scoopDepth) * 0.45; // rounded ends, clamped to the smaller span
+    const zLow = -1;
+    const zHigh = p.floor + frontLip + 2; // clear the lip (if any); just nicks the floor when open
+    // A rounded-rect column centred on the front edge: the front half sits outside the part (cuts
+    // nothing), the rear half bites `scoopDepth` into the floor/lip. Square front corners keep the
+    // notch mouth flush with the open-front edge.
+    const profile = roundedRect(scoopW, scoopDepth * 2, r, true);
+    tray = s.sub(tray, s.move(s.extrude(profile, zHigh - zLow), 0, -outerL / 2, zLow));
+  }
+
   // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
   // the ridge above drops in and self-centres (self-supporting, no bridge). Inset with the ridge (see
   // above) so its outer wall leaves a solid, bed-adhering lip instead of a thin sliver.
@@ -484,6 +519,25 @@ export function buildTray(p: Params): BufferGeometry {
     if (windows.length > 0) {
       tray = s.sub(tray, s.union(windows));
       tray = s.add(tray, s.union(panels));
+    }
+  }
+
+  // Optional snap-rails for the removable label clip: a short T-rail (stem + wider head) on the front
+  // face of each side wall, near the top. They live on the side walls, so they're present whether the
+  // front is open or closed, and stop below the wall top so a stacked tray clears the rail + clip.
+  if (p.labelRail) {
+    const place = labelRailPlacement(p);
+    if (place) {
+      const { railLen, z, xRight } = place;
+      const yF = -outerL / 2;
+      const { stemW, stemY, headW, headT } = RAIL;
+      for (const sgn of [1, -1]) {
+        const xc = sgn * xRight;
+        // The stem overlaps 0.6 mm into the wall and 0.4 mm into the head so the union bonds solidly.
+        const stem = s.move(s.box(stemW, stemY + 1.0, railLen), xc, yF - stemY / 2 + 0.1, z);
+        const head = s.move(s.box(headW, headT, railLen), xc, yF - stemY - headT / 2, z);
+        tray = s.add(tray, s.union([stem, head]));
+      }
     }
   }
 

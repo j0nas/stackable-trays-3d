@@ -12,6 +12,7 @@ const CONTROLS: Ctrl[] = [
   { key: "capture", label: "Tray depth (footprint)", min: 150, max: 297, step: 1, group: "size" },
   { key: "clearance", label: "Clearance / side", min: 0, max: 20, step: 0.5, group: "size" },
   { key: "frontLip", label: "Front lip (0 = open)", min: 0, max: 40, step: 1, group: "size" },
+  { key: "scoop", label: "Front scoop (0 = off)", min: 0, max: 120, step: 2, group: "size" },
   // Walls (structural rows, then the style select, then its pattern rows)
   { key: "depth", label: "Wall height", min: 15, max: 90, step: 1, group: "wall" },
   { key: "wall", label: "Wall thickness", min: 1.6, max: 4, step: 0.2, group: "wall" },

@@ -10,6 +10,7 @@ export type Params = {
   floor: number; // base/floor thickness
   depth: number; // interior height (back + side walls, above the floor)
   frontLip: number; // optional low front retaining lip above the floor (0 = fully open front)
+  scoop: number; // central front grab cutout width (0 = none); dips the lip + notches the floor edge
   cornerRadius: number; // rounded vertical outer corners
   ridgeHeight: number; // stacking ridge height (also the groove depth) — registration depth
   ridgeWidth: number; // stacking ridge thickness at its base
@@ -20,6 +21,7 @@ export type Params = {
   floorPatternScale: number; // nominal floor cell size / pitch (mm)
   floorPatternMargin: number; // solid border kept around the floor pattern (mm)
   stackRidge: boolean; // ridge on the wall tops + groove in the floor so trays nest when stacked
+  labelRail: boolean; // snap-rails at the front-top of the side walls for the removable label clip
 };
 
 export type WallStyle =
@@ -51,6 +53,7 @@ export const defaults: Params = {
   floor: 3.0, // a bit thicker so the stacking groove leaves solid floor above it
   depth: 45,
   frontLip: 0, // fully open front by default — the sheet overhangs and you grab it there
+  scoop: 0, // no grab cutout by default
   cornerRadius: 8,
   ridgeHeight: 1.6,
   ridgeWidth: 1.2,
@@ -61,6 +64,7 @@ export const defaults: Params = {
   floorPatternScale: 9,
   floorPatternMargin: 7, // keeps the base flange / groove ring solid
   stackRidge: true,
+  labelRail: false, // off by default — adds the clip mount + lets you export the clip
 };
 
 export type Dims = {

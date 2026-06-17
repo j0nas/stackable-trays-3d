@@ -17,6 +17,13 @@ so it fits smaller beds.
 
 - **Open front** — sheet overhangs and stays accessible while stacked (`Front lip = 0` removes
   the front wall _and_ the floor under it, for tighter bed fitment).
+- **Front scoop** (optional) — a central grab cutout on the front edge, so you can still pull a
+  sheet out of a tightly stacked middle tray. It dips a front lip down to the floor and nicks a
+  thumb-scallop into the floor edge, so it helps whether the front is open or closed.
+- **Swappable label** (optional) — a snap-rail at the front-top of each side wall takes a small
+  printed clip with a top-loading pocket. Drop a paper card in, snap the clip on, and relabel
+  forever by swapping the card or moving the clip — nothing about the paper type is baked into the
+  tray. Present whether the front is open or closed.
 - **Stackable** — a chamfered ridge on the wall tops drops into a funnel groove in the floor
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut
@@ -26,7 +33,8 @@ so it fits smaller beds.
   (A1 mini · A1/X2D · P1/P2/X1 · H2D/H2C · A2L · H2S — current 2026 lineup, grouped by bed),
   accounting for 90° rotation. Amber means it fits only with the P1/P2/X1 filament-cutter
   [exclusion-zone mod](https://wiki.bambulab.com/en/knowledge-sharing/print-volume-limitations).
-- **One-click binary STL export.**
+- **One-click binary STL export** — the tray, and (when the label rail is on) the clip as its own
+  print-ready STL.
 
 ## Run
 
@@ -39,11 +47,12 @@ vp check        # format + lint + typecheck
 
 ## Controls
 
-Grouped in the panel: **Size & fit** (footprint, clearance, front lip) ·
+Grouped in the panel: **Size & fit** (footprint, clearance, front lip, front scoop) ·
 **Walls** (height, thickness, corner radius, style, pattern size + margin) ·
 **Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge height/width, on/off) ·
-**View & output** (material, show sheet, show stack). Walls and floor each have their own pattern
-size and margin, since the same margin reads very differently on a tall wall vs. the flat base.
+**Label** (clip rail on/off + clip export) · **View & output** (material, show sheet, show stack).
+Walls and floor each have their own pattern size and margin, since the same margin reads very
+differently on a tall wall vs. the flat base.
 
 ## How it works
 
@@ -53,7 +62,9 @@ size and margin, since the same margin reads very differently on a tall wall vs.
   [manifold-3d](https://github.com/elalish/manifold) (Google's Manifold kernel — the engine modern
   OpenSCAD uses), which **guarantees watertight, 2-manifold output** so the STL slices cleanly.
 - `src/tray.ts` — `Params → one watertight BufferGeometry`, modelled **Z-up, base on z = 0,
-  millimetres** (slicer convention).
+  millimetres** (slicer convention). Also owns the optional front scoop and the label-clip rails.
+- `src/label.ts` — the removable label clip (a separate part) and the shared `RAIL` dimensions the
+  tray builds its snap-rail from, so the two always mate.
 - `src/viewer/` — `main.ts` wires it together; `scene.ts` (renderer/camera/lights, renders on
   demand), `readout.ts` (volume estimate + fit badges), `controls.ts` (the slider panel), and
   `storage.ts` (localStorage persistence).
@@ -66,6 +77,10 @@ them.
 Print **base-down, no supports**. Every opening is vertical or cellular so its top only bridges a
 short span; honeycomb/diamond/holes are self-supporting, and the stacking ridge/groove are tapered.
 Floor patterns are vertical through-holes in a flat plate, so they need no bridging.
+
+The **label clip** also prints flat, base-down, no supports — slide a paper card in from the top. If
+it grips the rail too tightly or too loosely, tweak the single `FIT` clearance in `src/label.ts`
+(bigger = looser; ~0.35 mm suits a well-tuned Bambu).
 
 ## Stack
 
