@@ -39,9 +39,11 @@ vp check        # format + lint + typecheck
 
 ## Controls
 
-Grouped in the panel: **Size & fit** (depth, clearance, wall height, front lip) ·
-**Walls & base** (thicknesses, corner radius) · **Pattern** (margin, size, wall/floor style) ·
-**Stacking** (ridge height/width, on/off) · **View & output** (material, show sheet, show stack).
+Grouped in the panel: **Size & fit** (footprint, clearance, front lip) ·
+**Walls** (height, thickness, corner radius, style, pattern size + margin) ·
+**Floor** (thickness, style, pattern size + margin) · **Stacking** (ridge height/width, on/off) ·
+**View & output** (material, show sheet, show stack). Walls and floor each have their own pattern
+size and margin, since the same margin reads very differently on a tall wall vs. the flat base.
 
 ## How it works
 

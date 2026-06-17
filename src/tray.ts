@@ -427,13 +427,13 @@ export function buildTray(p: Params): BufferGeometry {
   // union back ONE perforated panel whose cells are baked-in Earcut holes. Two booleans total,
   // independent of cell count. Openings stay vertical/cellular so they print base-down, no support.
   {
-    const m = p.patternMargin;
     const ov = 0.8; // panel overlap into the frame, for a watertight bond
     const windows: BufferGeometry[] = [];
     const panels: BufferGeometry[] = [];
 
     // Walls: a flat window + perforated insert in each flat span (corners, rim, base stay solid).
     if (p.wallStyle !== "solid") {
+      const m = p.wallPatternMargin;
       const wHt = p.depth - 2 * m;
       const cz = (p.floor + H) / 2;
       const sideLen = innerL - 2 * (m + 5); // a touch more border at the corners
@@ -442,7 +442,7 @@ export function buildTray(p: Params): BufferGeometry {
       const ry = outerL / 2 - p.wall / 2;
       const cut = p.wall + 4; // window clears the full wall thickness
       const cells = (len: number, idx: number): Shape[] =>
-        wallShapes(p.wallStyle, len, wHt, idx, p.patternScale);
+        wallShapes(p.wallStyle, len, wHt, idx, p.wallPatternScale);
       if (wHt > 6 && sideLen > 12) {
         const c = cells(sideLen, 1);
         for (const sgn of [1, -1]) {
@@ -462,10 +462,11 @@ export function buildTray(p: Params): BufferGeometry {
     // Floor: a window + perforated plate over the interior base (the groove ring lives under the
     // walls, so it stays solid). Holes are vertical through-cuts in a flat plate — no bridging.
     if (p.floorStyle !== "solid") {
+      const m = p.floorPatternMargin;
       const fW = innerW - 2 * m;
       const fL = innerL - 2 * m;
       if (fW > 12 && fL > 12) {
-        const c = wallShapes(p.floorStyle, fW, fL, 3, p.patternScale);
+        const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
         const win = new ExtrudeGeometry(rectShape(0, 0, fW, fL), {
           depth: p.floor + 2,
           bevelEnabled: false,

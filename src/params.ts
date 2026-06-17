@@ -13,10 +13,12 @@ export type Params = {
   cornerRadius: number; // rounded vertical outer corners
   ridgeHeight: number; // stacking ridge height (also the groove depth) — registration depth
   ridgeWidth: number; // stacking ridge thickness at its base
-  patternMargin: number; // solid border kept around the wall/floor pattern (mm)
-  patternScale: number; // nominal pattern cell size / pitch (mm) — independent of the margin
   wallStyle: WallStyle; // how the side + rear walls are cut (material + looks)
+  wallPatternScale: number; // nominal wall cell size / pitch (mm) — independent of the margin
+  wallPatternMargin: number; // solid border kept around the wall pattern (mm)
   floorStyle: WallStyle; // how the floor is cut (perforate to save filament)
+  floorPatternScale: number; // nominal floor cell size / pitch (mm)
+  floorPatternMargin: number; // solid border kept around the floor pattern (mm)
   stackRidge: boolean; // ridge on the wall tops + groove in the floor so trays nest when stacked
 };
 
@@ -41,10 +43,12 @@ export const defaults: Params = {
   cornerRadius: 8,
   ridgeHeight: 1.6,
   ridgeWidth: 1.2,
-  patternMargin: 7, // keeps the rim, ridge and base flange solid
-  patternScale: 9, // ~9 mm cells
   wallStyle: "louvres",
+  wallPatternScale: 9, // ~9 mm cells
+  wallPatternMargin: 7, // keeps the rim and corners solid
   floorStyle: "solid", // solid base by default; perforate it to save filament
+  floorPatternScale: 9,
+  floorPatternMargin: 7, // keeps the base flange / groove ring solid
   stackRidge: true,
 };
 
