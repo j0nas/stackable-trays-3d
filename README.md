@@ -62,8 +62,12 @@ differently on a tall wall vs. the flat base.
 - `src/csg.ts` — the solid-modelling layer: 2D profiles extruded and boolean'd through
   [manifold-3d](https://github.com/elalish/manifold) (Google's Manifold kernel — the engine modern
   OpenSCAD uses), which **guarantees watertight, 2-manifold output** so the STL slices cleanly.
-- `src/tray.ts` — `Params → one watertight BufferGeometry`, modelled **Z-up, base on z = 0,
-  millimetres** (slicer convention). Also owns the optional front scoop and the label-clip rails.
+- `src/shapes.ts` — reusable 2D profiles (rounded rects, rings, polygons, perforated panels).
+- `src/patterns.ts` — the wall/floor lightening patterns (louvres, grid, holes, diamond, honeycomb,
+  voronoi) as 2D cell sets.
+- `src/tray.ts` — the assembly: `Params → one watertight BufferGeometry`, modelled **Z-up, base on
+  z = 0, millimetres** (slicer convention). Reads as a pipeline — body, stacking ridge, front
+  opening, scoop, groove, patterns, label rails.
 - `src/label.ts` — the removable label clip (a separate part) and the shared `RAIL` dimensions the
   tray builds its snap-rail from, so the two always mate.
 - `src/viewer/` — `main.ts` wires it together; `scene.ts` (renderer/camera/lights, renders on

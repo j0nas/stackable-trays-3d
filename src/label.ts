@@ -68,11 +68,19 @@ export function buildLabelClip(): BufferGeometry {
   const plateH = plateTop - plateBot;
   const plateZ = (plateTop + plateBot) / 2;
 
-  body = s.add(body, s.move(s.box(fW, plate, plateH), 0, y0 - plate / 2, plateZ)); // backing plate
+  // Each box overlaps the one behind it by `weld` so the whole clip fuses into a single solid (boxes
+  // that merely touch at a coincident face stay separate shells — they'd print as loose pieces).
+  const weld = 0.4;
+  body = s.add(body, s.move(s.box(fW, plate + weld, plateH), 0, y0 - plate / 2 + weld / 2, plateZ)); // backing plate (welds into the channel)
   body = s.add(
     body,
-    s.move(s.box(fW, gap + lipT, plateH), 0, y0 - plate - (gap + lipT) / 2, plateZ),
-  ); // front block
+    s.move(
+      s.box(fW, gap + lipT + weld, plateH),
+      0,
+      y0 - plate - (gap + lipT) / 2 + weld / 2,
+      plateZ,
+    ),
+  ); // front block (welds into the plate)
 
   // Carve the pocket (depth `gap`) then a smaller window through the front lip so the card shows,
   // leaving a `lip`-wide border on the sides and bottom. Both cuts are anchored at the card's bottom
