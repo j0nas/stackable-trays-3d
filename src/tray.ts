@@ -253,8 +253,9 @@ export function buildTray(p: Params): BufferGeometry {
   const d = dims(p);
   const { innerW, innerL, outerW, outerL, H } = d;
   const innerR = Math.max(p.cornerRadius - p.wall, 0.6);
-  const frontLip = Math.min(p.frontLip, p.depth - 1); // 0 = open front; otherwise a low bump-stop
+  const frontLip = Math.min(p.frontLip, p.depth); // 0 = open front; p.depth = full closed front wall
   const open = frontLip < 0.05; // fully open front: square the front corners (no wall to round into)
+  const frontClosed = frontLip >= p.depth - 0.05; // lip reaches the wall top: closed front, full ridge
   const cW = innerW + p.wall; // wall-top centreline footprint
   const cL = innerL + p.wall;
   const cr = Math.max(p.cornerRadius - p.wall / 2, 0.5); // centreline corner radius
@@ -288,35 +289,44 @@ export function buildTray(p: Params): BufferGeometry {
 
   // Chamfered stacking ridge: tapers from full width at the wall top to a narrow tip — it self-
   // centres into the groove and prints as a self-supporting peak. Built as a full loop; the front
-  // segment is removed by the open-front cut below.
+  // segment is removed with the front opening below, unless the front is a full closed wall.
   if (stack) {
     tray = s.add(tray, taperedRing(s, rW, rL, rr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open));
   }
 
-  // Open the front. With a lip (frontLip > 0) we only clear the wall above the lip and leave the floor
-  // under it. Fully open (lip = 0) the cut goes through the floor too, so the base ends at the opening
-  // instead of leaving a bare floor lip jutting out under the overhanging sheet.
-  const cutLow = open ? -1 : p.floor + frontLip;
-  const cutHigh = H + hr + 2;
-  tray = s.sub(
-    tray,
-    s.move(
-      s.box(outerW + 4, p.wall + 4, cutHigh - cutLow),
-      0,
-      -outerL / 2 + p.wall / 2,
-      (cutLow + cutHigh) / 2,
-    ),
-  );
+  // Open the front — skipped entirely for a full closed front (lip at the wall top), which then keeps
+  // its ridge like the other three walls. With a partial lip we clear the wall above the lip and leave
+  // the floor under it; fully open (lip = 0) the cut goes through the floor too, so the base ends at the
+  // opening instead of leaving a bare floor lip jutting out under the overhanging sheet.
+  if (!frontClosed) {
+    const cutLow = open ? -1 : p.floor + frontLip;
+    const cutHigh = H + hr + 2;
+    tray = s.sub(
+      tray,
+      s.move(
+        s.box(outerW + 4, p.wall + 4, cutHigh - cutLow),
+        0,
+        -outerL / 2 + p.wall / 2,
+        (cutLow + cutHigh) / 2,
+      ),
+    );
+  }
 
   // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
   // the ridge above drops in and self-centres (self-supporting, no bridge). Inset with the ridge so
   // its outer wall leaves a solid, bed-adhering lip instead of a thin sliver.
   if (stack) {
     const gDepth = hr + 0.4;
-    tray = s.sub(
-      tray,
-      taperedRing(s, rW, rL, rr, grooveMouthW, grooveTipW, -0.1, gDepth + 0.1, 6, open),
-    );
+    let groove = taperedRing(s, rW, rL, rr, grooveMouthW, grooveTipW, -0.1, gDepth + 0.1, 6, open);
+    // Drop the groove's front segment whenever the ridge loses its (i.e. the front isn't a full wall),
+    // so the two always match — both present on a closed front, neither on an open/partial one.
+    if (!frontClosed) {
+      groove = s.sub(
+        groove,
+        s.move(s.box(outerW + 4, p.wall + 4, gDepth + 4), 0, -outerL / 2 + p.wall / 2, gDepth / 2),
+      );
+    }
+    tray = s.sub(tray, groove);
   }
 
   tray = applyPatterns(s, p, tray, d);

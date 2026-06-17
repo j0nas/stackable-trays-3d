@@ -5,13 +5,32 @@
 import type { Params } from "../params.ts";
 
 type NumKey = { [K in keyof Params]: Params[K] extends number ? K : never }[keyof Params];
-type Ctrl = { key: NumKey; label: string; min: number; max: number; step: number; group: string };
+// `maxKey` makes the upper bound track another param's live value (e.g. front lip ≤ wall height)
+// instead of a fixed number.
+type Ctrl = {
+  key: NumKey;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  group: string;
+  maxKey?: NumKey;
+};
 
 const CONTROLS: Ctrl[] = [
   // Size & fit
   { key: "capture", label: "Tray depth (footprint)", min: 150, max: 297, step: 1, group: "size" },
   { key: "clearance", label: "Clearance / side", min: 0, max: 20, step: 0.5, group: "size" },
-  { key: "frontLip", label: "Front lip (0 = open)", min: 0, max: 40, step: 1, group: "size" },
+  // Front lip runs 0 (open) … wall height (full closed front), so cap it at the wall height.
+  {
+    key: "frontLip",
+    label: "Front lip (0 = open)",
+    min: 0,
+    max: 90,
+    step: 1,
+    group: "size",
+    maxKey: "depth",
+  },
   { key: "scoop", label: "Front scoop (0 = off)", min: 0, max: 120, step: 2, group: "size" },
   { key: "scoopDepth", label: "Scoop depth (0 = off)", min: 0, max: 100, step: 1, group: "size" },
   // Walls (structural rows, then the style select, then its pattern rows)
@@ -54,6 +73,9 @@ const tidy = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed
 
 export function buildControls(params: Params, onChange: () => void): { sync: () => void } {
   const syncers: Array<() => void> = [];
+  const bounders: Array<() => void> = []; // re-evaluate dynamic (maxKey) ceilings
+
+  const hiOf = (c: Ctrl): number => (c.maxKey ? params[c.maxKey] : c.max);
 
   for (const c of CONTROLS) {
     const row = document.createElement("div");
@@ -65,7 +87,7 @@ export function buildControls(params: Params, onChange: () => void): { sync: () 
     const range = document.createElement("input");
     range.type = "range";
     range.min = String(c.min);
-    range.max = String(c.max);
+    range.max = String(hiOf(c));
     range.step = String(c.step);
     range.value = String(params[c.key]);
 
@@ -74,10 +96,11 @@ export function buildControls(params: Params, onChange: () => void): { sync: () 
     num.value = tidy(params[c.key]);
 
     const apply = (raw: number): void => {
-      const v = Math.min(Math.max(raw, c.min), c.max);
+      const v = Math.min(Math.max(raw, c.min), hiOf(c));
       params[c.key] = v;
       range.value = String(v);
       num.value = tidy(v);
+      refreshBounds(); // changing one control (e.g. wall height) can lower another's ceiling
       onChange();
     };
     range.addEventListener("input", () => apply(Number(range.value)));
@@ -85,7 +108,23 @@ export function buildControls(params: Params, onChange: () => void): { sync: () 
       const v = Number(num.value);
       if (!Number.isNaN(v)) apply(v);
     });
+
+    // Keep a dynamic-max slider's ceiling in step with what it depends on, clamping its value down if
+    // that ceiling dropped below the current value.
+    if (c.maxKey) {
+      bounders.push(() => {
+        const hi = hiOf(c);
+        range.max = String(hi);
+        if (params[c.key] > hi) {
+          params[c.key] = hi;
+          range.value = String(hi);
+          num.value = tidy(hi);
+        }
+      });
+    }
+
     syncers.push(() => {
+      range.max = String(hiOf(c));
       range.value = String(params[c.key]);
       num.value = tidy(params[c.key]);
     });
@@ -93,6 +132,11 @@ export function buildControls(params: Params, onChange: () => void): { sync: () 
     row.append(label, range, num);
     document.querySelector(`[data-group="${c.group}"]`)?.append(row);
   }
+
+  function refreshBounds(): void {
+    for (const b of bounders) b();
+  }
+  refreshBounds(); // apply initial dynamic ceilings
 
   return { sync: () => syncers.forEach((s) => s()) };
 }

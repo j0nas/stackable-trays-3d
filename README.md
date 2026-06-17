@@ -15,8 +15,10 @@ so it fits smaller beds.
 
 ## What you get
 
-- **Open front** — sheet overhangs and stays accessible while stacked (`Front lip = 0` removes
-  the front wall _and_ the floor under it, for tighter bed fitment).
+- **Adjustable front** — the front-lip slider runs from `0` (fully open: no front wall, and the
+  floor under it removed for tighter bed fitment), through a low bump-stop lip, up to the **wall
+  height** for a fully closed front that keeps its stacking ridge like the other three walls. The
+  slider is capped at the current wall height.
 - **Front scoop** (optional) — a central grab cutout on the front edge, so you can still pull a
   sheet out of a tightly stacked middle tray. Adjustable width _and_ depth; it dips any front lip
   down to the floor and bites back into the floor edge, so it helps whether the front is open or
