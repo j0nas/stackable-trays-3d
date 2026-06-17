@@ -405,11 +405,26 @@ export function buildTray(p: Params): BufferGeometry {
   const wr = p.ridgeWidth;
   const stack = p.stackRidge && hr > 0.3;
 
+  // Bed adhesion: the groove is cut into the floor underside, which is the first layer on the plate.
+  // Centred on the thin wall, the funnel's wide mouth leaves a razor-thin outer lip right at the bed
+  // (~one extrusion line), which barely sticks. So bias the ridge+groove inward by `inset`, leaving a
+  // solid outer lip (~`lipMin`) on the printed bottom; the inner side just runs into the large solid
+  // floor disc, which adheres fine. Ridge and groove shift together, so stacked trays still register.
+  // `maxInset` keeps the shifted ridge essentially on the wall top (≤ ~0.3 mm cavity overhang).
+  const grooveMouthW = wr + 0.8; // funnel mouth, a touch wider than the ridge for self-centring
+  const grooveTipW = wr + 0.3; // narrows with depth
+  const lipMin = Math.max(1.0, p.wall * 0.4); // solid outer lip we aim to keep on the bed
+  const maxInset = Math.max(p.wall / 2 - wr / 2 + 0.3, 0);
+  const inset = stack ? Math.min(Math.max(lipMin - (p.wall - grooveMouthW) / 2, 0), maxInset) : 0;
+  const rW = cW - 2 * inset; // ridge/groove ring, shifted inboard for the bed lip
+  const rL = cL - 2 * inset;
+  const rr = Math.max(cr - inset, 0.5);
+
   // Chamfered stacking ridge: tapers from full width at the wall top to a narrow tip — it self-
   // centres into the groove and prints as a self-supporting peak. Built as a full loop; the front
   // segment is removed by the open-front cut below.
   if (stack) {
-    tray = op(tray, taperedRing(cW, cL, cr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open), ADDITION);
+    tray = op(tray, taperedRing(rW, rL, rr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open), ADDITION);
   }
 
   // Open the front. With a lip (frontLip > 0) we only clear the wall above the lip and leave the
@@ -426,13 +441,14 @@ export function buildTray(p: Params): BufferGeometry {
     (zLow + zHigh) / 2,
   );
 
-  // Chamfered groove in the floor underside: a wide funnel mouth at the bottom face narrowing in,
-  // so the ridge above drops in and self-centres. The funnel is self-supporting (no bridge).
+  // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
+  // the ridge above drops in and self-centres (self-supporting, no bridge). Inset with the ridge (see
+  // above) so its outer wall leaves a solid, bed-adhering lip instead of a thin sliver.
   if (stack) {
     const gDepth = hr + 0.4;
     tray = op(
       tray,
-      taperedRing(cW, cL, cr, wr + 1.0, wr + 0.4, -0.1, gDepth + 0.1, 6, open),
+      taperedRing(rW, rL, rr, grooveMouthW, grooveTipW, -0.1, gDepth + 0.1, 6, open),
       SUBTRACTION,
     );
   }
