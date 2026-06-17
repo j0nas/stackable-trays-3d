@@ -125,6 +125,17 @@ function rebuild(): void {
   updateReadout();
 }
 
+// Coalesce rapid slider input to one rebuild per frame, so a fast drag can't queue up a backlog of
+// (heavier) pattern rebuilds — the model just tracks the latest value.
+let rafPending = 0;
+function scheduleRebuild(): void {
+  if (rafPending) return;
+  rafPending = requestAnimationFrame(() => {
+    rafPending = 0;
+    rebuild();
+  });
+}
+
 function frameCamera(): void {
   const box = new Box3().setFromObject(mesh);
   for (const m of stackMeshes) if (m.visible) box.expandByObject(m);
@@ -163,6 +174,7 @@ const CONTROLS: Ctrl[] = [
   { key: "ridgeHeight", label: "Ridge height", min: 0.6, max: 2.2, step: 0.1, group: "stack" },
   { key: "ridgeWidth", label: "Ridge width", min: 0.8, max: 3, step: 0.1, group: "stack" },
   { key: "patternMargin", label: "Pattern margin", min: 2, max: 20, step: 0.5, group: "pattern" },
+  { key: "patternScale", label: "Pattern size", min: 5, max: 16, step: 0.5, group: "pattern" },
 ];
 const tidy = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const syncers: Array<() => void> = [];
@@ -190,7 +202,7 @@ for (const c of CONTROLS) {
     params[c.key] = v;
     range.value = String(v);
     num.value = tidy(v);
-    rebuild();
+    scheduleRebuild();
   };
   range.addEventListener("input", () => apply(Number(range.value)));
   num.addEventListener("change", () => {

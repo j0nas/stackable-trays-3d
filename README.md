@@ -2,7 +2,7 @@
 
 Parametric, open-front, **stackable A4 paper trays** for FDM 3D printing. Tune everything with
 sliders, watch the model and the filament estimate update live, then export a print-ready STL.
-The preview and the STL come from the *same* geometry, so the print matches what you see.
+The preview and the STL come from the _same_ geometry, so the print matches what you see.
 
 ![Preview](docs/preview.png)
 
@@ -16,7 +16,7 @@ so it fits smaller beds.
 ## What you get
 
 - **Open front** — sheet overhangs and stays accessible while stacked (`Front lip = 0` removes
-  the front wall *and* the floor under it, for tighter bed fitment).
+  the front wall _and_ the floor under it, for tighter bed fitment).
 - **Stackable** — a chamfered ridge on the wall tops drops into a funnel groove in the floor
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut
@@ -38,7 +38,7 @@ vp check        # format + lint + typecheck
 ## Controls
 
 Grouped in the panel: **Size & fit** (depth, clearance, wall height, front lip) ·
-**Walls & base** (thicknesses, corner radius) · **Pattern** (margin + wall/floor style) ·
+**Walls & base** (thicknesses, corner radius) · **Pattern** (margin, size, wall/floor style) ·
 **Stacking** (ridge height/width, on/off) · **View & output** (material, show sheet, show stack).
 
 ## How it works

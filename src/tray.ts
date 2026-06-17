@@ -117,9 +117,9 @@ function op(target: Brush, geom: BufferGeometry, mode: number, x = 0, y = 0, z =
 
 // --- wall patterns: 2D shapes in local (u = along wall, v = vertical) coordinates -------------
 
-function louvreShapes(wLen: number, hLen: number): Shape[] {
-  const slotW = 8;
-  const gap = 7;
+function louvreShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const slotW = size;
+  const gap = size * 0.85;
   const n = Math.floor((wLen + gap) / (slotW + gap));
   if (n < 1) return [];
   const used = n * slotW + (n - 1) * gap;
@@ -137,8 +137,9 @@ function rng(seed: number): () => number {
   };
 }
 
-function voronoiShapes(wLen: number, hLen: number, seedIdx: number): Shape[] {
-  const n = Math.max(5, Math.round((wLen * hLen) / (22 * 22)));
+function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
+  const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
+  const n = Math.max(5, Math.round((wLen * hLen) / (spacing * spacing)));
   const rand = rng(1234 + seedIdx * 97);
   const pts: [number, number][] = Array.from({ length: n }, () => [
     (rand() - 0.5) * wLen,
@@ -171,8 +172,6 @@ function voronoiShapes(wLen: number, hLen: number, seedIdx: number): Shape[] {
   }
   return shapes;
 }
-
-const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 function polyShape(cx: number, cy: number, r: number, sides: number, rot: number): Shape {
   const s = new Shape();
@@ -216,84 +215,96 @@ function fits(p: [number, number], wLen: number, hLen: number, m: number): boole
   return Math.abs(p[0]) <= wLen / 2 - m && Math.abs(p[1]) <= hLen / 2 - m;
 }
 
-function honeycombShapes(wLen: number, hLen: number): Shape[] {
-  const R = clamp(hLen / 6, 3.5, 8);
-  const cutR = R - 2.2 / Math.sqrt(3);
+function honeycombShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const R = size / Math.sqrt(3); // horizontal cell pitch == size
+  const cutR = Math.max(R - 2.2 / Math.sqrt(3), 0.6);
   return lattice(wLen, hLen, Math.sqrt(3) * R, 1.5 * R, true)
     .filter((p) => fits(p, wLen, hLen, R * 0.95))
     .map(([x, y]) => polyShape(x, y, cutR, 6, Math.PI / 2)); // pointy-top -> self-supporting
 }
 
-function diamondShapes(wLen: number, hLen: number): Shape[] {
-  const pitch = clamp(hLen / 4, 7, 13);
-  const cutR = (pitch - 2.4) / 2;
+function diamondShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const pitch = size;
+  const cutR = Math.max((pitch - 2.4) / 2, 0.6);
   return lattice(wLen, hLen, pitch, pitch, true)
     .filter((p) => fits(p, wLen, hLen, cutR + 0.5))
     .map(([x, y]) => polyShape(x, y, cutR, 4, Math.PI / 2)); // 45° edges -> self-supporting
 }
 
-function holesShapes(wLen: number, hLen: number): Shape[] {
-  const pitch = clamp(hLen / 4, 6.5, 12);
-  const r = (pitch - 2.6) / 2;
+function holesShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const pitch = size;
+  const r = Math.max((pitch - 2.6) / 2, 0.5);
   return lattice(wLen, hLen, pitch, pitch * 0.87, true)
     .filter((p) => fits(p, wLen, hLen, r + 0.5))
     .map(([x, y]) => circleShape(x, y, r));
 }
 
-function gridShapes(wLen: number, hLen: number): Shape[] {
-  const pitch = clamp(hLen / 3.5, 7.5, 13);
-  const c = pitch - 2.6;
+function gridShapes(wLen: number, hLen: number, size: number): Shape[] {
+  const pitch = size;
+  const c = Math.max(pitch - 2.6, 0.8);
   return lattice(wLen, hLen, pitch, pitch, false)
     .filter((p) => fits(p, wLen, hLen, c / 2 + 0.5))
     .map(([x, y]) => rectShape(x, y, c, c));
 }
 
-function wallShapes(style: WallStyle, wLen: number, hLen: number, seedIdx: number): Shape[] {
+function wallShapes(
+  style: WallStyle,
+  wLen: number,
+  hLen: number,
+  seedIdx: number,
+  size: number,
+): Shape[] {
   switch (style) {
     case "louvres":
-      return louvreShapes(wLen, hLen);
+      return louvreShapes(wLen, hLen, size);
     case "voronoi":
-      return voronoiShapes(wLen, hLen, seedIdx);
+      return voronoiShapes(wLen, hLen, seedIdx, size);
     case "honeycomb":
-      return honeycombShapes(wLen, hLen);
+      return honeycombShapes(wLen, hLen, size);
     case "diamond":
-      return diamondShapes(wLen, hLen);
+      return diamondShapes(wLen, hLen, size);
     case "holes":
-      return holesShapes(wLen, hLen);
+      return holesShapes(wLen, hLen, size);
     case "grid":
-      return gridShapes(wLen, hLen);
+      return gridShapes(wLen, hLen, size);
     default:
       return [];
   }
 }
 
-// Extrude wall-pattern shapes through a wall and orient them onto that wall.
+// Orient a (u,v)-plane shape onto a wall and extrude it through `thickness`.
 // side wall (normal X): local (u,v) -> world (Y, Z); rear wall (normal Y): local (u,v) -> (X, Z).
-function wallCutters(
-  shapes: Shape[],
+function onWall(
+  shape: Shape,
   kind: "side" | "rear",
   px: number,
   py: number,
   cz: number,
   thickness: number,
-): BufferGeometry[] {
+): BufferGeometry {
   const rot = new Matrix4();
   if (kind === "side") rot.set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
   else rot.set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-  return shapes.map((sh) => {
-    const g = mergeVertices(
-      new ExtrudeGeometry(sh, {
-        depth: thickness,
-        bevelEnabled: false,
-        steps: 1,
-        curveSegments: 10,
-      }),
-    );
-    g.translate(0, 0, -thickness / 2); // centre the cut on the wall
-    g.applyMatrix4(rot);
-    g.translate(px, py, cz);
-    return g;
+  const g = new ExtrudeGeometry(shape, {
+    depth: thickness,
+    bevelEnabled: false,
+    steps: 1,
+    curveSegments: 8, // only affects round holes; 8 is plenty at cell scale
   });
+  g.translate(0, 0, -thickness / 2); // centre on the wall
+  g.applyMatrix4(rot);
+  g.translate(px, py, cz);
+  return g;
+}
+
+// A solid panel = rectangle minus the pattern cells, oversized by `ov` so it overlaps and bonds
+// into the surrounding frame. The cells become holes baked into ONE Earcut'd extrude, so a
+// perforated wall/floor costs a single union — not one CSG boolean per cell (which scales ~cubically
+// in three-bvh-csg and made dense floors take ~minutes).
+function perforatedPanel(cells: Shape[], wLen: number, hLen: number, ov: number): Shape {
+  const panel = rectShape(0, 0, wLen + 2 * ov, hLen + 2 * ov);
+  panel.holes.push(...cells); // Shape extends Path, so each cell is a valid hole contour
+  return panel;
 }
 
 export function buildTray(p: Params): BufferGeometry {
@@ -353,49 +364,71 @@ export function buildTray(p: Params): BufferGeometry {
     );
   }
 
-  // Wall pattern (lightening + looks). All openings are vertical/cellular so their tops bridge only
-  // a short span — printable base-down without support.
-  if (p.wallStyle !== "solid") {
-    const bV = p.patternMargin; // border top/bottom (keeps the rim, ridge and a base flange solid)
-    const bEnd = p.patternMargin + 5; // a touch more at the corners for strength
-    const wHt = p.depth - 2 * bV;
-    const cz = (p.floor + H) / 2;
-    const sideLen = innerL - 2 * bEnd;
-    const rearLen = innerW - 2 * bEnd;
-    const T = p.wall + 4;
-    if (wHt > 6) {
-      const make = (len: number, idx: number): Shape[] => wallShapes(p.wallStyle, len, wHt, idx);
-      const cutters: BufferGeometry[] = [];
-      if (sideLen > 12) {
-        const s = make(sideLen, 1);
-        cutters.push(...wallCutters(s, "side", outerW / 2, 0, cz, T));
-        cutters.push(...wallCutters(s, "side", -outerW / 2, 0, cz, T));
+  // Lightening patterns (walls + floor). Instead of CSG-subtracting every cell — each boolean scales
+  // ~cubically in three-bvh-csg, so a dense floor took ~minutes — we cut ONE window per region and
+  // union back ONE perforated panel whose cells are baked-in Earcut holes. Two booleans total,
+  // independent of cell count. Openings stay vertical/cellular so they print base-down, no support.
+  {
+    const m = p.patternMargin;
+    const ov = 0.8; // panel overlap into the frame, for a watertight bond
+    const windows: BufferGeometry[] = [];
+    const panels: BufferGeometry[] = [];
+
+    // Walls: a flat window + perforated insert in each flat span (corners, rim, base stay solid).
+    if (p.wallStyle !== "solid") {
+      const wHt = p.depth - 2 * m;
+      const cz = (p.floor + H) / 2;
+      const sideLen = innerL - 2 * (m + 5); // a touch more border at the corners
+      const rearLen = innerW - 2 * (m + 5);
+      const sx = outerW / 2 - p.wall / 2; // wall centreline
+      const ry = outerL / 2 - p.wall / 2;
+      const cut = p.wall + 4; // window clears the full wall thickness
+      const cells = (len: number, idx: number): Shape[] =>
+        wallShapes(p.wallStyle, len, wHt, idx, p.patternScale);
+      if (wHt > 6 && sideLen > 12) {
+        const c = cells(sideLen, 1);
+        for (const sgn of [1, -1]) {
+          windows.push(onWall(rectShape(0, 0, sideLen, wHt), "side", sgn * sx, 0, cz, cut));
+          panels.push(
+            onWall(perforatedPanel(c, sideLen, wHt, ov), "side", sgn * sx, 0, cz, p.wall),
+          );
+        }
       }
-      if (rearLen > 12) {
-        cutters.push(...wallCutters(make(rearLen, 2), "rear", 0, outerL / 2, cz, T));
-      }
-      if (cutters.length > 0) {
-        tray = op(tray, mergeGeometries(cutters, false), SUBTRACTION);
+      if (wHt > 6 && rearLen > 12) {
+        const c = cells(rearLen, 2);
+        windows.push(onWall(rectShape(0, 0, rearLen, wHt), "rear", 0, ry, cz, cut));
+        panels.push(onWall(perforatedPanel(c, rearLen, wHt, ov), "rear", 0, ry, cz, p.wall));
       }
     }
-  }
 
-  // Floor pattern (optional): perforate the interior base to save filament. These are vertical
-  // through-holes in a flat plate, so they print without bridging. Inset by the same margin so a
-  // solid frame stays under the paper and clear of the perimeter groove ring.
-  if (p.floorStyle !== "solid") {
-    const m = p.patternMargin;
-    const fW = innerW - 2 * m;
-    const fL = innerL - 2 * m;
-    if (fW > 12 && fL > 12) {
-      const cutters = wallShapes(p.floorStyle, fW, fL, 3).map((sh) => {
-        const g = prism(sh, p.floor + 2);
-        g.translate(0, 0, -1); // pierce the full floor thickness (z = 0 .. floor)
-        return g;
-      });
-      if (cutters.length > 0) {
-        tray = op(tray, mergeGeometries(cutters, false), SUBTRACTION);
+    // Floor: a window + perforated plate over the interior base (the groove ring lives under the
+    // walls, so it stays solid). Holes are vertical through-cuts in a flat plate — no bridging.
+    if (p.floorStyle !== "solid") {
+      const fW = innerW - 2 * m;
+      const fL = innerL - 2 * m;
+      if (fW > 12 && fL > 12) {
+        const c = wallShapes(p.floorStyle, fW, fL, 3, p.patternScale);
+        const win = new ExtrudeGeometry(rectShape(0, 0, fW, fL), {
+          depth: p.floor + 2,
+          bevelEnabled: false,
+          steps: 1,
+        });
+        win.translate(0, 0, -1);
+        windows.push(win);
+        panels.push(
+          new ExtrudeGeometry(perforatedPanel(c, fW, fL, ov), {
+            depth: p.floor,
+            bevelEnabled: false,
+            steps: 1,
+            curveSegments: 8,
+          }), // extrudes z = 0 .. floor
+        );
       }
+    }
+
+    if (windows.length > 0) {
+      tray = op(tray, mergeVertices(mergeGeometries(windows, false)), SUBTRACTION);
+      tray = op(tray, mergeVertices(mergeGeometries(panels, false)), ADDITION);
     }
   }
 
