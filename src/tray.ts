@@ -2,15 +2,15 @@
 // live preview and STL export. Modelled with Z up and the base on z = 0 (millimetres), which is
 // what slicers expect, so the exported STL drops onto the Bambu plate at true size.
 //
-// Three.js is a render-mesh library, not a solid modeller, so the boolean solid operations are
-// done with three-bvh-csg, which produces manifold output suitable for printing. Everything is
-// designed to print base-down with NO supports: walls are vertical, every opening's top only
-// bridges a short span, and the stacking ridge/groove are tapered so they self-support.
+// Three.js is a render-mesh library, not a solid modeller, so the boolean solid operations run
+// through manifold-3d (see csg.ts), which guarantees watertight 2-manifold output suitable for
+// printing. Everything is designed to print base-down with NO supports: walls are vertical, every
+// opening's top only bridges a short span, and the stacking ridge/groove are tapered so they
+// self-support.
 
-import { BoxGeometry, type BufferGeometry, ExtrudeGeometry, Matrix4, Path, Shape } from "three";
-import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { type BufferGeometry, Path, Shape } from "three";
 import { Delaunay } from "d3-delaunay";
-import { ADDITION, Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
+import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
 import { dims, type Params, type WallStyle } from "./params.ts";
 
 // Trace a rounded rectangle (centred on the origin, XY plane) onto a Path or Shape. With
@@ -56,32 +56,28 @@ function rectShape(cx: number, cy: number, w: number, h: number): Shape {
   return s;
 }
 
-// Extrude a 2D shape up the +Z axis (z = 0 .. height). Indexed so three-bvh-csg can consume it.
-function prism(shape: Shape, height: number): BufferGeometry {
-  return mergeVertices(
-    new ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, steps: 1 }),
-  );
-}
-
-function ringGeom(
+// A rounded-rectangular ring profile (outer rounded rect minus an inner one) as a 2D Shape, ready to
+// extrude. Used for the tapered stacking ridge/groove slices.
+function ringShape(
   oW: number,
   oL: number,
   oR: number,
   iW: number,
   iL: number,
   iR: number,
-  h: number,
   squareFront = false,
-): BufferGeometry {
+): Shape {
   const s = roundedRect(oW, oL, oR, squareFront);
   s.holes.push(roundedRectInto(new Path(), iW, iL, iR, squareFront));
-  return mergeVertices(new ExtrudeGeometry(s, { depth: h, bevelEnabled: false, steps: 1 }));
+  return s;
 }
 
-// A loop with a tapered (chamfered) cross-section, approximated as a stack of thin ring slices that
-// shrink from `wBottom` (full thickness at zBottom) to `wTop`. Used for the self-registering
-// stacking ridge (peak up) and the funnel groove (wide mouth) — both print without support.
+// A loop with a tapered (chamfered) cross-section: a stack of thin ring slices that shrink from
+// `wBottom` (full thickness at zBottom) to `wTop`, unioned into one manifold solid. Used for the
+// self-registering stacking ridge (peak up) and the funnel groove (wide mouth) — both print without
+// support. Slices overlap slightly so the union is watertight.
 function taperedRing(
+  s: Scope,
   cW: number,
   cL: number,
   cr: number,
@@ -91,42 +87,24 @@ function taperedRing(
   height: number,
   slices: number,
   squareFront = false,
-): BufferGeometry {
-  const geos: BufferGeometry[] = [];
+): Solid {
+  const parts: Solid[] = [];
   const dh = height / slices;
   for (let i = 0; i < slices; i++) {
     const f = (i + 0.5) / slices;
     const w = wBottom + (wTop - wBottom) * f;
-    const g = ringGeom(
+    const sh = ringShape(
       cW + w,
       cL + w,
       Math.max(cr + w / 2, 0.5),
       cW - w,
       cL - w,
       Math.max(cr - w / 2, 0.3),
-      dh + 0.08,
       squareFront,
     );
-    g.translate(0, 0, zBottom + i * dh - 0.04);
-    geos.push(g);
+    parts.push(s.move(s.extrude(sh, dh + 0.08), 0, 0, zBottom + i * dh - 0.04));
   }
-  return mergeGeometries(geos, false);
-}
-
-const evaluator = new Evaluator();
-evaluator.useGroups = false;
-
-function brush(geom: BufferGeometry, x = 0, y = 0, z = 0): Brush {
-  const b = new Brush(geom);
-  b.position.set(x, y, z);
-  b.updateMatrixWorld();
-  return b;
-}
-
-function op(target: Brush, geom: BufferGeometry, mode: number, x = 0, y = 0, z = 0): Brush {
-  const result = evaluator.evaluate(target, brush(geom, x, y, z), mode);
-  result.updateMatrixWorld();
-  return result;
+  return s.union(parts);
 }
 
 // --- wall patterns: 2D shapes in local (u = along wall, v = vertical) coordinates -------------
@@ -344,35 +322,32 @@ function wallShapes(
   }
 }
 
-// Orient a (u,v)-plane shape onto a wall and extrude it through `thickness`.
-// side wall (normal X): local (u,v) -> world (Y, Z); rear wall (normal Y): local (u,v) -> (X, Z).
+// Column-major affine matrices mapping a (u,v) profile extruded in +Z onto a wall plane. side wall
+// (normal X): local (u,v,thickness) -> world (Y, Z, X); rear wall (normal Y) -> (X, Z, −Y). These are
+// 90° axis swaps, for which Manifold uses exact (rounding-free) transforms.
+const SIDE_TO_WALL: Mat = [0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1];
+const REAR_TO_WALL: Mat = [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1];
+
+// Place a (u,v)-plane shape onto a wall: extrude through `thickness`, centre it, swap axes onto the
+// wall plane, then move to the wall centreline at (px,py,cz).
 function onWall(
+  s: Scope,
   shape: Shape,
   kind: "side" | "rear",
   px: number,
   py: number,
   cz: number,
   thickness: number,
-): BufferGeometry {
-  const rot = new Matrix4();
-  if (kind === "side") rot.set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-  else rot.set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-  const g = new ExtrudeGeometry(shape, {
-    depth: thickness,
-    bevelEnabled: false,
-    steps: 1,
-    curveSegments: 8, // only affects round holes; 8 is plenty at cell scale
-  });
-  g.translate(0, 0, -thickness / 2); // centre on the wall
-  g.applyMatrix4(rot);
-  g.translate(px, py, cz);
-  return g;
+): Solid {
+  let sol = s.extrude(shape, thickness, 8); // 8 segments/curve is plenty at cell scale
+  sol = s.move(sol, 0, 0, -thickness / 2); // centre on the wall
+  sol = s.transform(sol, kind === "side" ? SIDE_TO_WALL : REAR_TO_WALL);
+  return s.move(sol, px, py, cz);
 }
 
-// A solid panel = rectangle minus the pattern cells, oversized by `ov` so it overlaps and bonds
-// into the surrounding frame. The cells become holes baked into ONE Earcut'd extrude, so a
-// perforated wall/floor costs a single union — not one CSG boolean per cell (which scales ~cubically
-// in three-bvh-csg and made dense floors take ~minutes).
+// A solid panel = rectangle minus the pattern cells, oversized by `ov` so it overlaps and bonds into
+// the surrounding frame. The cells become holes baked into ONE extruded panel, so a perforated
+// wall/floor costs a single union — not one boolean per cell.
 function perforatedPanel(cells: Shape[], wLen: number, hLen: number, ov: number): Shape {
   const panel = rectShape(0, 0, wLen + 2 * ov, hLen + 2 * ov);
   panel.holes.push(...cells); // Shape extends Path, so each cell is a valid hole contour
@@ -388,17 +363,13 @@ export function buildTray(p: Params): BufferGeometry {
   const cL = innerL + p.wall;
   const cr = Math.max(p.cornerRadius - p.wall / 2, 0.5); // centreline corner radius
 
+  const s = scope(); // tracks every Manifold so finish() frees the WASM heap after this build
+
   // Solid outer body, then hollow it from the floor up and out through the open top. When the front
   // is open both profiles square off their front corners so the side walls stay straight.
-  let tray: Brush = brush(prism(roundedRect(outerW, outerL, p.cornerRadius, open), H));
-  tray = op(
-    tray,
-    prism(roundedRect(innerW, innerL, innerR, open), p.depth + 1),
-    SUBTRACTION,
-    0,
-    0,
-    p.floor,
-  );
+  let tray = s.extrude(roundedRect(outerW, outerL, p.cornerRadius, open), H);
+  const cavity = s.extrude(roundedRect(innerW, innerL, innerR, open), p.depth + 1);
+  tray = s.sub(tray, s.move(cavity, 0, 0, p.floor));
 
   // Size the ridge/groove so the groove still leaves solid floor above it.
   const hr = Math.min(p.ridgeHeight, p.floor - 0.8);
@@ -424,7 +395,7 @@ export function buildTray(p: Params): BufferGeometry {
   // centres into the groove and prints as a self-supporting peak. Built as a full loop; the front
   // segment is removed by the open-front cut below.
   if (stack) {
-    tray = op(tray, taperedRing(rW, rL, rr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open), ADDITION);
+    tray = s.add(tray, taperedRing(s, rW, rL, rr, wr, wr * 0.3, H - 0.1, hr + 0.1, 6, open));
   }
 
   // Open the front. With a lip (frontLip > 0) we only clear the wall above the lip and leave the
@@ -432,35 +403,42 @@ export function buildTray(p: Params): BufferGeometry {
   // opening instead of leaving a bare floor lip jutting out under the overhanging sheet.
   const zLow = open ? -1 : p.floor + frontLip;
   const zHigh = H + hr + 2;
-  tray = op(
-    tray,
-    new BoxGeometry(outerW + 4, p.wall + 4, zHigh - zLow),
-    SUBTRACTION,
+  const frontCut = s.move(
+    s.box(outerW + 4, p.wall + 4, zHigh - zLow),
     0,
     -outerL / 2 + p.wall / 2,
     (zLow + zHigh) / 2,
   );
+  tray = s.sub(tray, frontCut);
 
   // Chamfered groove in the floor underside: a funnel mouth at the bottom face narrowing inward, so
   // the ridge above drops in and self-centres (self-supporting, no bridge). Inset with the ridge (see
   // above) so its outer wall leaves a solid, bed-adhering lip instead of a thin sliver.
   if (stack) {
     const gDepth = hr + 0.4;
-    tray = op(
-      tray,
-      taperedRing(rW, rL, rr, grooveMouthW, grooveTipW, -0.1, gDepth + 0.1, 6, open),
-      SUBTRACTION,
+    const groove = taperedRing(
+      s,
+      rW,
+      rL,
+      rr,
+      grooveMouthW,
+      grooveTipW,
+      -0.1,
+      gDepth + 0.1,
+      6,
+      open,
     );
+    tray = s.sub(tray, groove);
   }
 
-  // Lightening patterns (walls + floor). Instead of CSG-subtracting every cell — each boolean scales
-  // ~cubically in three-bvh-csg, so a dense floor took ~minutes — we cut ONE window per region and
-  // union back ONE perforated panel whose cells are baked-in Earcut holes. Two booleans total,
-  // independent of cell count. Openings stay vertical/cellular so they print base-down, no support.
+  // Lightening patterns (walls + floor). Rather than booleaning every cell, we cut ONE window per
+  // region and union back ONE perforated panel whose cells are baked-in Earcut holes — so a region
+  // costs two booleans regardless of cell count. Openings stay vertical/cellular so they print
+  // base-down, no support.
   {
     const ov = 0.8; // panel overlap into the frame, for a watertight bond
-    const windows: BufferGeometry[] = [];
-    const panels: BufferGeometry[] = [];
+    const windows: Solid[] = [];
+    const panels: Solid[] = [];
 
     // Walls: a flat window + perforated insert in each flat span (corners, rim, base stay solid).
     if (p.wallStyle !== "solid") {
@@ -477,16 +455,16 @@ export function buildTray(p: Params): BufferGeometry {
       if (wHt > 6 && sideLen > 12) {
         const c = cells(sideLen, 1);
         for (const sgn of [1, -1]) {
-          windows.push(onWall(rectShape(0, 0, sideLen, wHt), "side", sgn * sx, 0, cz, cut));
+          windows.push(onWall(s, rectShape(0, 0, sideLen, wHt), "side", sgn * sx, 0, cz, cut));
           panels.push(
-            onWall(perforatedPanel(c, sideLen, wHt, ov), "side", sgn * sx, 0, cz, p.wall),
+            onWall(s, perforatedPanel(c, sideLen, wHt, ov), "side", sgn * sx, 0, cz, p.wall),
           );
         }
       }
       if (wHt > 6 && rearLen > 12) {
         const c = cells(rearLen, 2);
-        windows.push(onWall(rectShape(0, 0, rearLen, wHt), "rear", 0, ry, cz, cut));
-        panels.push(onWall(perforatedPanel(c, rearLen, wHt, ov), "rear", 0, ry, cz, p.wall));
+        windows.push(onWall(s, rectShape(0, 0, rearLen, wHt), "rear", 0, ry, cz, cut));
+        panels.push(onWall(s, perforatedPanel(c, rearLen, wHt, ov), "rear", 0, ry, cz, p.wall));
       }
     }
 
@@ -498,31 +476,18 @@ export function buildTray(p: Params): BufferGeometry {
       const fL = innerL - 2 * m;
       if (fW > 12 && fL > 12) {
         const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
-        const win = new ExtrudeGeometry(rectShape(0, 0, fW, fL), {
-          depth: p.floor + 2,
-          bevelEnabled: false,
-          steps: 1,
-        });
-        win.translate(0, 0, -1);
-        windows.push(win);
-        panels.push(
-          new ExtrudeGeometry(perforatedPanel(c, fW, fL, ov), {
-            depth: p.floor,
-            bevelEnabled: false,
-            steps: 1,
-            curveSegments: 8,
-          }), // extrudes z = 0 .. floor
-        );
+        windows.push(s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, 0, -1));
+        panels.push(s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8)); // z = 0 .. floor
       }
     }
 
     if (windows.length > 0) {
-      tray = op(tray, mergeVertices(mergeGeometries(windows, false)), SUBTRACTION);
-      tray = op(tray, mergeVertices(mergeGeometries(panels, false)), ADDITION);
+      tray = s.sub(tray, s.union(windows));
+      tray = s.add(tray, s.union(panels));
     }
   }
 
-  const geom = tray.geometry;
+  const geom = s.finish(tray);
   geom.computeVertexNormals();
   geom.computeBoundingBox();
   return geom;

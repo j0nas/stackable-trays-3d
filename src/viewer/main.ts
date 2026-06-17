@@ -4,6 +4,8 @@
 
 import { BoxGeometry, DoubleSide, Mesh, MeshStandardMaterial, type Object3D } from "three";
 import { STLExporter } from "three/addons/exporters/STLExporter.js";
+import wasmUrl from "manifold-3d/manifold.wasm?url";
+import { initCSG } from "../csg.ts";
 import { defaults, dims, type Params } from "../params.ts";
 import { buildTray } from "../tray.ts";
 import { buildControls } from "./controls.ts";
@@ -12,6 +14,8 @@ import { createViewer } from "./scene.ts";
 import { clearParams, loadParams, saveParams } from "./storage.ts";
 
 const params: Params = loadParams(defaults); // restore the last session's settings, if any
+
+await initCSG(wasmUrl); // load the Manifold (manifold-3d) WASM kernel before any geometry is built
 
 const app = document.getElementById("app")!;
 const viewer = createViewer(app);
