@@ -73,7 +73,7 @@ export const defaults: Params = {
   itemWidth: 210,
   itemLength: 297, // A4 paper by default
   clearance: 10,
-  frontOverhang: 59, // ~20% of A4 overhangs the open front (the rest, ~80%, is held)
+  frontOverhang: 0, // item fully enclosed by default; raise it to overhang the open front (grab access + smaller footprint)
   wall: 2.4,
   floor: 3.0, // a bit thicker so the stacking groove leaves solid floor above it
   depth: 45,

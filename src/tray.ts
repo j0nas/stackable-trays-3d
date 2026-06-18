@@ -188,6 +188,27 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
       windows.push(onWall(s, rectShape(0, 0, rearLen, wHt), "rear", 0, ry, cz, cut));
       panels.push(onWall(s, perforatedPanel(c, rearLen, wHt, ov), "rear", 0, ry, cz, p.wall));
     }
+
+    // Front lip: when a front wall exists (a partial lip or a full closed front) pattern it like the
+    // other three. The lip spans floor..floor+frontLip; pattern the band inside the m margins, centred
+    // on the lip (when closed this is the full wall, identical to the rear). A short lip can't fit a
+    // pattern plus its top/bottom borders, so it stays solid.
+    const frontLip = Math.min(p.frontLip, p.depth);
+    const lipHt = frontLip - 2 * m;
+    if (lipHt > 6 && rearLen > 12) {
+      const czFront = p.floor + frontLip / 2;
+      const c = wallShapes(p.wallStyle, rearLen, lipHt, 4, p.wallPatternScale);
+      let win = onWall(s, rectShape(0, 0, rearLen, lipHt), "rear", 0, -ry, czFront, cut);
+      // The scoop cuts a full-height strip out of the lip, so reserve an m border around it (carve the
+      // dilated scoop span out of the window) — the re-added panel's cells there sit over solid wall and
+      // fill in, then cutScoop removes the clean notch. Same trick as the floor.
+      const sc = scoopDims(p, d);
+      if (sc) win = s.sub(win, s.move(s.box(sc.w + 2 * m, cut + 4, lipHt + 4), 0, -ry, czFront));
+      windows.push(win);
+      panels.push(
+        onWall(s, perforatedPanel(c, rearLen, lipHt, ov), "rear", 0, -ry, czFront, p.wall),
+      );
+    }
   }
 
   // Floor: a window + perforated plate over the interior base (the groove ring lives under the walls,

@@ -10,23 +10,25 @@ The preview and the STL come from the _same_ geometry, so the print matches what
 ## Why
 
 A 3D-printed alternative to the laser-cut plywood version — better looking, lighter, and it
-nests. Trays hold ~80% of the sheet and leave the front open, so paper overhangs where you grab
-it and stays reachable while stacked. Holding only part of the sheet also shrinks the footprint
-so it fits smaller beds.
+nests. The front is always open so the contents stay reachable while stacked. By default the tray
+fully holds the item; turning up the **front overhang** lets the item jut out the open front so you
+can grab it (the original A4 letter-tray style), which also shrinks the footprint to fit smaller beds.
 
 ## What you get
 
 - **Any item** — set **item width × length** directly, or pick a **preset** (A4, US Letter, A5,
   postcard, 4×6 photo, index card, #10 envelope, business card). **Clearance** is one uniform fit gap
   applied to every enclosing wall.
-- **Front overhang** — `frontOverhang` sets how far the item sticks out the open front. At `0` the
-  item is **fully enclosed** and the front earns its own clearance like the sides and back; turn it up
-  and the item overhangs (the original A4 letter-tray feel ≈ 20% out) so you can grab it while stacked,
-  which also shrinks the footprint to fit smaller beds.
+- **Front overhang** — `frontOverhang` sets how far the item sticks out the open front. At `0`
+  (**the default**) the item is fully enclosed and the front earns its own clearance like the sides and
+  back; turn it up and the item overhangs (the A4 letter-tray feel, e.g. ~20% out) so you can grab it
+  while stacked, which also shrinks the footprint to fit smaller beds. Picking an item preset resets
+  this to `0`, so a preset always yields a tray that fully holds that item.
 - **Adjustable front lip** — independent of the overhang (this is vertical): the lip slider runs from
   `0` (open top: no front wall, and the floor under it removed for tighter bed fitment), through a low
   bump-stop lip, up to the **wall height** for a fully closed front that keeps its stacking ridge like
-  the other three walls. The slider is capped at the current wall height.
+  the other three walls. The slider is capped at the current wall height. A tall enough lip (or a fully
+  closed front) carries the same lightening pattern as the other three walls; a short lip stays solid.
 - **Front scoop** (optional) — a central grab cutout on the front edge, so you can still pull a
   sheet out of a tightly stacked middle tray. Adjustable width _and_ depth; it dips any front lip
   down to the floor and bites back into the floor edge, so it helps whether the front is open or
