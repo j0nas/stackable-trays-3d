@@ -159,7 +159,7 @@ function updateClip(): void {
   for (const side of ["left", "right"] as const) {
     const on = place !== null && place.sides.includes(side);
     clips[side].visible = on;
-    if (on && place) clips[side].position.set(place.x[side], place.headY, place.headZ);
+    if (on && place) clips[side].position.set(place.x[side], place.faceY, place.baseZ);
   }
   downloadClipBtn.style.display = place ? "block" : "none";
 }

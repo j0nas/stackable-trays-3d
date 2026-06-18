@@ -33,10 +33,11 @@ can grab it (the original A4 letter-tray style), which also shrinks the footprin
   sheet out of a tightly stacked middle tray. Adjustable width _and_ depth; it dips any front lip
   down to the floor and bites back into the floor edge, so it helps whether the front is open or
   closed. Its corners follow the corner-radius setting.
-- **Swappable label** (optional) — a clip rail at a front-bottom corner (**left, right, or both**),
-  anchored to the floor so it stays attached whether the front is open or closed. It takes a small
-  printed clip with a top-loading pocket: drop a paper card in, snap the clip on, and relabel forever
-  by swapping the card or moving the clip — nothing about the paper type is baked into the tray.
+- **Swappable label** (optional) — a slim **dovetail rail** at a front-bottom corner (**left, right,
+  or both**), anchored to the floor so it stays attached whether the front is open or closed. A small
+  printed clip slides down onto the dovetail and bottoms on a stop; it has a top-loading pocket, so you
+  relabel forever by swapping a paper card or moving the clip — nothing about the paper type is baked
+  into the tray. The rail projects forward and sits low, well clear of the tray stacked above.
 - **Stackable** — a chamfered ridge on the wall tops drops into a funnel groove in the floor
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut
@@ -81,7 +82,7 @@ independently; the margin is the solid border width and reads the same on the wa
   z = 0, millimetres** (slicer convention). Reads as a pipeline — body, stacking ridge, front
   opening, scoop, groove, patterns, label rails.
 - `src/label.ts` — the removable label clip (a separate part) and the shared `RAIL` dimensions the
-  tray builds its snap-rail from, so the two always mate.
+  tray builds its dovetail rail from, so the two always mate.
 - `src/viewer/` — `main.ts` wires it together; `scene.ts` (renderer/camera/lights, renders on
   demand), `readout.ts` (volume estimate + fit badges), `controls.ts` (the slider panel), and
   `storage.ts` (localStorage persistence).

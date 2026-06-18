@@ -17,7 +17,7 @@ import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
 import { RAIL } from "./label.ts";
 import { type Dims, dims, type LabelSide, type Params } from "./params.ts";
 import { wallShapes } from "./patterns.ts";
-import { perforatedPanel, rectShape, ringShape, roundedRect } from "./shapes.ts";
+import { dovetailShape, perforatedPanel, rectShape, ringShape, roundedRect } from "./shapes.ts";
 
 // A loop with a tapered (chamfered) cross-section: a stack of thin ring slices that shrink from
 // `wBottom` (full thickness at zBottom) to `wTop`, unioned into one manifold solid. Used for the
@@ -85,33 +85,29 @@ function railSides(side: LabelSide): ("left" | "right")[] {
   return [];
 }
 
-// Placement for the floor-anchored label rail(s), shared by the geometry (tray.ts builds the rails)
-// and the viewer (drops a clip preview onto each). Each rail is a short T-post rising from the floor's
-// front edge at a front corner — the floor is always there, unlike the front wall, which is cut away
-// on an open front or above a lip. Returns null when no side is selected or the wall is too shallow.
+// Placement for the floor-anchored label rail(s), shared by the geometry (tray.ts builds the rib) and
+// the viewer (drops a clip preview onto each). Each rib rises from the floor's front edge at a front
+// corner and projects forward — the floor is always there, unlike the front wall, which is cut away on
+// an open front or above a lip. Returns null when no side is selected or the tray is too shallow.
 export function labelRailPlacement(p: Params): {
   railLen: number;
-  baseZ: number; // floor top = rail bottom
-  floorFrontY: number; // front edge of the floor the post bonds to
-  headY: number; // head centre Y (the clip's local origin)
-  headZ: number; // head centre Z
+  baseZ: number; // floor top = rail bottom = clip bottom
+  faceY: number; // tray front face: the rib's neck plane and the clip's back
   sides: ("left" | "right")[];
-  x: { left: number; right: number }; // head centre X per side
+  x: { left: number; right: number }; // rib centre X per side
 } | null {
   const sides = railSides(p.labelRail);
   if (sides.length === 0) return null;
-  const { innerW, outerL } = dims(p);
-  const railLen = Math.min(RAIL.len, p.depth - 4);
-  if (railLen <= 8) return null;
-  const frontLip = Math.min(p.frontLip, p.depth - 1);
-  const floorFrontY = frontLip < 0.05 ? -outerL / 2 + p.wall + 2 : -outerL / 2;
-  const xMag = innerW / 2 - RAIL.headW / 2 - 2; // keep the post over the floor, near the corner
+  // Only offer a rail when the full-height clip clears the wall top with margin — a 20 mm label on a
+  // shallow tray would poke into the tray stacked above. (RAIL.len + 4 ≈ a couple of layers of slack.)
+  if (p.depth < RAIL.len + 4) return null;
+  const d = dims(p);
+  const open = Math.min(p.frontLip, p.depth) < 0.05;
+  const xMag = d.innerW / 2 - RAIL.tipW / 2 - 1.5; // near the corner, inboard of the side wall
   return {
-    railLen,
-    baseZ: p.floor,
-    floorFrontY,
-    headY: floorFrontY - RAIL.stemY - RAIL.headT / 2,
-    headZ: p.floor + railLen / 2,
+    railLen: RAIL.len,
+    baseZ: p.floor, // floor top = the seat the clip's stop bottoms on
+    faceY: floorFrontY(p, d, open),
     sides,
     x: { left: -xMag, right: xMag },
   };
@@ -247,28 +243,35 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
   return s.add(tray, s.union(panels));
 }
 
-// Optional label-clip rails: a short T-rail (stem + wider head) rising from the floor's front edge at
-// the chosen corner(s). Anchoring to the floor — always present — keeps the rail connected whether
-// the front is open or closed; a wall-mounted rail floats free once the front is cut away. Each rail
-// stays well below the wall top, so a stacked tray clears it.
+// Optional label-clip rails: a short dovetail rib rising from the floor's front edge at the chosen
+// corner(s). Anchoring to the floor — always present — keeps the rib connected whether the front is
+// open or closed; a wall-mounted rib floats free once the front is cut away. The rib only bites a
+// hairline into the body to weld; its mass projects forward, and it stays well below the wall top, so a
+// stacked tray clears it.
 function addLabelRails(s: Scope, p: Params, tray: Solid): Solid {
   const place = labelRailPlacement(p);
   if (!place) return tray;
-  const { railLen, baseZ, floorFrontY: fY, headZ, x, sides } = place;
-  const { stemW, stemY, headW, headT } = RAIL;
-  const stemFront = fY - stemY - 0.4; // overlap the head back by 0.4 to bond
-  const stemBack = fY + 1.2; // reach into the floor for a solid weld
-  const stemZc = baseZ + (railLen - 1.5) / 2; // from ~floor−1.5 (into the floor) up to floor+railLen
+  const { railLen, baseZ, faceY, x, sides } = place;
+  const { neckW, tipW, projY } = RAIL;
+  const bite = 0.8; // how far the neck reaches into the front wall / floor edge
   for (const side of sides) {
     const xc = side === "left" ? x.left : x.right;
-    const stem = s.move(
-      s.box(stemW, stemBack - stemFront, railLen + 1.5),
+    // Dovetail flare: rises from z = baseZ, projecting forward. Its underside (at baseZ) is the shoulder
+    // the clip's stop seats on. Run it 2 mm short of the clip's socket depth so the rib top tucks just
+    // inside the socket mouth rather than poking out. dovetailShape is centred with its neck (+Y) edge
+    // at +projY/2, so shift it so the neck sits `bite` into the body at the front face and the wider tip
+    // leads.
+    let flare = s.extrude(dovetailShape(neckW, tipW, projY), railLen - 2);
+    flare = s.move(flare, xc, faceY + bite - projY / 2, baseZ);
+    // Neck root: a small block behind the flare that bites down into the floor (and the front wall, if
+    // any) to weld the rib on — so the rib needs no tall post rising inside the cavity.
+    const root = s.move(
+      s.box(neckW, bite + 1.6, 2.4),
       xc,
-      (stemFront + stemBack) / 2,
-      stemZc,
+      faceY + (bite + 1.6) / 2 - 0.3,
+      baseZ - 0.7,
     );
-    const head = s.move(s.box(headW, headT, railLen), xc, fY - stemY - headT / 2, headZ);
-    tray = s.add(tray, s.union([stem, head]));
+    tray = s.add(tray, s.union([flare, root]));
   }
   return tray;
 }

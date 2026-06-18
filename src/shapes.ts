@@ -46,6 +46,22 @@ export function rectShape(cx: number, cy: number, w: number, h: number): Shape {
   return s;
 }
 
+// An isosceles trapezoid for the label dovetail rail, centred on the origin in the XY plane and
+// extruded vertically (+Z) by the caller. `neckW` is the width (X) at the +Y edge — the neck, where the
+// rail meets the tray — and `tipW` the width at the −Y edge (the flared front tip); `depthY` is the Y
+// span. tipW > neckW makes it an undercut dovetail: a label slid down onto it can't pull off forward
+// (−Y), since the widening rib jams against the narrowing socket mouth.
+export function dovetailShape(neckW: number, tipW: number, depthY: number): Shape {
+  const s = new Shape();
+  const hd = depthY / 2;
+  s.moveTo(-tipW / 2, -hd); // front-left (−Y, wide tip)
+  s.lineTo(tipW / 2, -hd); // front-right
+  s.lineTo(neckW / 2, hd); // back-right (+Y, narrow neck)
+  s.lineTo(-neckW / 2, hd); // back-left
+  s.closePath();
+  return s;
+}
+
 // A rounded-rectangular ring profile (outer rounded rect minus an inner one), ready to extrude.
 // Used for the tapered stacking ridge/groove slices.
 export function ringShape(
