@@ -37,7 +37,8 @@ can grab it (the original A4 letter-tray style), which also shrinks the footprin
   or both**), anchored to the floor so it stays attached whether the front is open or closed. A small
   printed clip slides down onto the dovetail and bottoms on a stop; it has a top-loading pocket, so you
   relabel forever by swapping a paper card or moving the clip — nothing about the paper type is baked
-  into the tray. The rail projects forward and sits low, well clear of the tray stacked above.
+  into the tray. The rail is glued flush onto the front face and projects forward — it never reaches
+  into the body, so it clears the stacking ridge and groove and tucks well below the tray stacked above.
 - **Stackable** — a chamfered ridge on the wall tops drops into a funnel groove in the floor
   above, so trays self-register when nested. Both are tapered to print without support.
 - **7 wall + floor styles** — solid, louvres, grid, holes, diamond, honeycomb, voronoi — to cut

@@ -243,35 +243,34 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
   return s.add(tray, s.union(panels));
 }
 
-// Optional label-clip rails: a short dovetail rib rising from the floor's front edge at the chosen
-// corner(s). Anchoring to the floor — always present — keeps the rib connected whether the front is
-// open or closed; a wall-mounted rib floats free once the front is cut away. The rib only bites a
-// hairline into the body to weld; its mass projects forward, and it stays well below the wall top, so a
-// stacked tray clears it.
+// Optional label-clip rails: a short dovetail rib GLUED onto the tray's front face at the chosen
+// corner(s). The rib's neck overlaps the face by a hairline `weld` — just enough for a watertight
+// union — and nothing more reaches into the body, so it never touches the stacking ridge (wall top) or
+// the groove (floor underside): a closed or partial front still nests cleanly. The rib's mass projects
+// forward and tops out well below the wall, so a stacked tray clears it. A small foot straddles the
+// floor's front edge (always present, unlike the front wall) to weld the rib down; it sits above the
+// groove, so even a closed front keeps a clean nest.
 function addLabelRails(s: Scope, p: Params, tray: Solid): Solid {
   const place = labelRailPlacement(p);
   if (!place) return tray;
   const { railLen, baseZ, faceY, x, sides } = place;
   const { neckW, tipW, projY } = RAIL;
-  const bite = 0.8; // how far the neck reaches into the front wall / floor edge
+  // Hairline overlap into the face — fuses the rib to the body without protruding into it. The groove
+  // never rises above baseZ − 0.4 (gDepth ≤ floor − 0.4), so the foot below clears it for any config.
+  const weld = 0.4;
   for (const side of sides) {
     const xc = side === "left" ? x.left : x.right;
-    // Dovetail flare: rises from z = baseZ, projecting forward. Its underside (at baseZ) is the shoulder
-    // the clip's stop seats on. Run it 2 mm short of the clip's socket depth so the rib top tucks just
-    // inside the socket mouth rather than poking out. dovetailShape is centred with its neck (+Y) edge
-    // at +projY/2, so shift it so the neck sits `bite` into the body at the front face and the wider tip
-    // leads.
+    // Dovetail flare: rises from z = baseZ (its underside is the shoulder the clip's stop seats on),
+    // projecting forward. dovetailShape is centred with its neck (+Y) edge at +projY/2, so shift it so
+    // the neck overlaps the face by `weld` and the wider tip leads. Run it 2 mm short of the clip's
+    // socket depth so the rib top tucks just inside the socket mouth rather than poking out.
     let flare = s.extrude(dovetailShape(neckW, tipW, projY), railLen - 2);
-    flare = s.move(flare, xc, faceY + bite - projY / 2, baseZ);
-    // Neck root: a small block behind the flare that bites down into the floor (and the front wall, if
-    // any) to weld the rib on — so the rib needs no tall post rising inside the cavity.
-    const root = s.move(
-      s.box(neckW, bite + 1.6, 2.4),
-      xc,
-      faceY + (bite + 1.6) / 2 - 0.3,
-      baseZ - 0.7,
-    );
-    tray = s.add(tray, s.union([flare, root]));
+    flare = s.move(flare, xc, faceY + weld - projY / 2, baseZ);
+    // Foot: a hairline weld straddling the floor top (z = baseZ ± 0.4) that bridges the rib to the
+    // floor's front edge. Kept above the stacking groove, so it never fouls the nest, and it bites only
+    // `weld` into the body — flush-glued, not a post sunk into the floor.
+    const foot = s.move(s.box(neckW, weld, 0.8), xc, faceY + weld / 2, baseZ);
+    tray = s.add(tray, s.union([flare, foot]));
   }
   return tray;
 }
