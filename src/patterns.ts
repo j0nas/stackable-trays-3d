@@ -11,7 +11,7 @@
 import { Shape } from "three";
 import { Delaunay } from "d3-delaunay";
 import type { WallStyle } from "./params.ts";
-import { circleShape, polyShape, rectShape } from "./shapes.ts";
+import { circleShape, polyShape, rectShape, roundedRect } from "./shapes.ts";
 
 function louvreShapes(wLen: number, hLen: number, size: number): Shape[] {
   const slotW = size;
@@ -57,6 +57,20 @@ function clipHalfPlane(
   return out;
 }
 
+// Clip a convex polygon to a convex boundary ring (CCW), edge by edge. Used to make voronoi cells
+// follow a rounded corner instead of d3's rectangular clip box, so the pattern hugs the radius the way
+// the slot/lattice patterns (clipped by the rounded window) already do.
+function clipToConvexRing(poly: [number, number][], ring: [number, number][]): [number, number][] {
+  let out = poly;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = ring[i];
+    const [bx, by] = ring[(i + 1) % ring.length];
+    out = clipHalfPlane(out, ax, ay, -(by - ay), bx - ax); // CCW ring: inside is left of each edge
+    if (out.length < 3) return [];
+  }
+  return out;
+}
+
 // Erode a convex polygon inward by a fixed distance `d` (half the strut width), by intersecting the
 // inward-shifted half-plane of every edge. Returns [] if the cell is too small to survive — voronoi
 // cells are always convex, so this is exact. Using a FIXED inset (not a ratio) is what makes the
@@ -91,7 +105,14 @@ function insetConvexRing(ring: [number, number][], d: number): [number, number][
   return poly;
 }
 
-function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number): Shape[] {
+function voronoiShapes(
+  wLen: number,
+  hLen: number,
+  seedIdx: number,
+  size: number,
+  cornerR = 0, // when > 0, clip cells to a rounded rect of this radius so the pattern follows the corner
+  squareFront = false,
+): Shape[] {
   const spacing = size * 2.2; // voronoi cells read well a bit larger than the lattice patterns
   const strut = 2.2; // fixed wall between cells, matching the lattice patterns (printable minimum)
   // Fill the given (already margin-inset) span. Bail only when there's genuinely no room for one
@@ -105,11 +126,24 @@ function voronoiShapes(wLen: number, hLen: number, seedIdx: number, size: number
     (rand() - 0.5) * hLen,
   ]);
   const voro = Delaunay.from(pts).voronoi([-wLen / 2, -hLen / 2, wLen / 2, hLen / 2]);
+  // d3 only clips to a rectangle; for the floor we want cells to follow the rounded corner. Clip each
+  // cell to the rounded-rect outline so the openings hug the radius like the slot/lattice patterns do.
+  const bound =
+    cornerR > 0
+      ? (roundedRect(wLen, hLen, cornerR, squareFront)
+          .getPoints(10)
+          .map((p) => [p.x, p.y]) as [number, number][])
+      : null;
   const shapes: Shape[] = [];
   for (let i = 0; i < n; i++) {
     const poly = voro.cellPolygon(i);
     if (!poly || poly.length < 4) continue;
-    const ring = insetConvexRing(poly.slice(0, poly.length - 1) as [number, number][], strut / 2);
+    let cell = poly.slice(0, poly.length - 1) as [number, number][];
+    if (bound) {
+      cell = clipToConvexRing(cell, bound);
+      if (cell.length < 3) continue; // cell fell entirely outside the rounded corner
+    }
+    const ring = insetConvexRing(cell, strut / 2);
     if (ring.length < 3) continue; // cell too small to keep a printable strut -> stays solid
     const sh = new Shape();
     ring.forEach((pt, j) => (j === 0 ? sh.moveTo(pt[0], pt[1]) : sh.lineTo(pt[0], pt[1])));
@@ -195,12 +229,14 @@ export function wallShapes(
   hLen: number,
   seedIdx: number,
   size: number,
+  cornerR = 0, // voronoi-only: clip cells to a rounded rect of this radius (the floor passes its corner)
+  squareFront = false,
 ): Shape[] {
   switch (style) {
     case "louvres":
       return louvreShapes(wLen, hLen, size);
     case "voronoi":
-      return voronoiShapes(wLen, hLen, seedIdx, size);
+      return voronoiShapes(wLen, hLen, seedIdx, size, cornerR, squareFront);
     case "honeycomb":
       return honeycombShapes(wLen, hLen, size);
     case "diamond":

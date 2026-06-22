@@ -237,7 +237,9 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
     const innerR = Math.max(p.cornerRadius - p.wall, 0.6);
     const winR = Math.max(innerR - m, 0.5);
     if (fW > 12 && fL > 12) {
-      const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
+      // Pass winR + open so a voronoi floor clips its cells to the rounded corner (other styles ignore
+      // it — slots/lattice already follow the rounded window).
+      const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale, winR, open);
       let win = s.move(s.extrude(roundedRect(fW, fL, winR, open), p.floor + 2), 0, fcy, -1);
       // Reserve the same m border around the scoop: bite the m-dilated scoop out of the window so the
       // floor stays solid there; cutScoop later removes the un-dilated notch, leaving an m border (matching
