@@ -2,8 +2,8 @@
 // bed-fit badges. Fed the live mesh geometry so the weight tracks whatever pattern is cut.
 
 import type { BufferGeometry } from "three";
-import { dims, type Params } from "../params.ts";
-import { fitFor, fitTitle, PRINTERS } from "../printers.ts";
+import type { Params } from "../params.ts";
+import { caveatOf, fitFor, fitTitle, PRINTERS } from "../printers.ts";
 
 const DENSITY: Record<string, number> = { PLA: 1.24, PETG: 1.27, ABS: 1.04, TPU: 1.21 }; // g/cm^3
 const FILAMENT_AREA_MM2 = Math.PI * (1.75 / 2) ** 2; // cross-section of 1.75mm filament
@@ -34,6 +34,16 @@ function meshVolumeCm3(g: BufferGeometry): number {
   return Math.abs(v) / 1000;
 }
 
+// True printed footprint (mm) from the mesh bounds, so it counts the label rail (and anything else
+// bolted onto the body) — not just the nominal wall box from dims(). The body is centred on the X/Y
+// origin, so each span is simply max − min along that axis.
+function footprintMm(g: BufferGeometry): { w: number; l: number } {
+  g.computeBoundingBox();
+  const bb = g.boundingBox;
+  if (!bb) return { w: 0, l: 0 };
+  return { w: bb.max.x - bb.min.x, l: bb.max.y - bb.min.y };
+}
+
 export type ReadoutEls = {
   dimsEl: HTMLElement;
   fitsEl: HTMLElement;
@@ -44,34 +54,53 @@ export type ReadoutEls = {
 
 export function createReadout(els: ReadoutEls): (params: Params) => void {
   return function update(params: Params): void {
-    const d = dims(params);
-    const long = Math.max(d.outerW, d.outerL);
-    const short = Math.min(d.outerW, d.outerL);
+    const geom = els.getGeometry();
+    const fp = footprintMm(geom); // real bounds (includes the label rail), not the nominal wall box
+    const long = Math.max(fp.w, fp.l);
+    const short = Math.min(fp.w, fp.l);
     const held = Math.round(((params.itemLength - params.frontOverhang) / params.itemLength) * 100);
     const mat = els.materialSel.value;
-    const volCm3 = meshVolumeCm3(els.getGeometry());
+    const volCm3 = meshVolumeCm3(geom);
     const grams = Math.round(volCm3 * (DENSITY[mat] ?? 1.24));
     const metres = volCm3 / FILAMENT_AREA_MM2; // cm^3 -> mm^3 (x1000) -> length (/area, /1000) cancel
-    els.dimsEl.textContent = `${d.outerW.toFixed(0)} × ${d.outerL.toFixed(0)} mm · holds ${held}% of item · ≈ ${grams} g · ${metres.toFixed(0)} m ${mat} (solid)`;
+    els.dimsEl.textContent = `${fp.w.toFixed(0)} × ${fp.l.toFixed(0)} mm · holds ${held}% of item · ≈ ${grams} g · ${metres.toFixed(0)} m ${mat} (solid)`;
 
-    // Compatibility badges (part may rotate 90°). Amber = fits the bed but only with the P1/X1
-    // exclusion-zone mod; the legend below appears only then and links to the Bambu wiki.
+    // Compatibility badges (part may rotate 90°). Amber = fits the bed but only with a caveat: the
+    // P1/X1 exclusion-zone mod, or single-nozzle-only on the dual-nozzle H2D/H2C. The legend below
+    // explains each active caveat (deduped) and links to the relevant Bambu wiki page.
     els.fitsEl.replaceChildren();
-    let modUrl = "";
+    const caveats = new Map<string, string>(); // note -> url, deduped across amber printers
     for (const pr of PRINTERS) {
       const fit = fitFor(pr, long, short);
-      if (fit === "mod" && pr.mod) modUrl = pr.mod.url;
+      if (fit === "mod") {
+        const c = caveatOf(pr);
+        if (c) caveats.set(c.note, c.url);
+      }
       const badge = document.createElement("span");
       badge.className = `fit ${fit}`;
       badge.textContent = pr.name;
       badge.title = fitTitle(pr, fit);
       els.fitsEl.append(badge);
     }
-    if (modUrl) {
-      els.legendEl.innerHTML = `<span class="swatch"></span> needs a <a href="${modUrl}" target="_blank" rel="noopener">bed mod</a> for full size`;
-      els.legendEl.style.display = "flex";
-    } else {
-      els.legendEl.style.display = "none";
+
+    els.legendEl.replaceChildren();
+    for (const [note, url] of caveats) {
+      const line = document.createElement("div");
+      line.className = "legend-line";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      line.append(sw, document.createTextNode(` ${note}`));
+      if (url) {
+        line.append(document.createTextNode(" · "));
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = "details";
+        line.append(a);
+      }
+      els.legendEl.append(line);
     }
+    els.legendEl.style.display = caveats.size > 0 ? "flex" : "none";
   };
 }

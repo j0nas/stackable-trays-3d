@@ -144,13 +144,19 @@
         text-decoration: line-through;
       }
       #fitsLegend {
-        align-items: center;
-        gap: 4px;
+        flex-direction: column;
+        gap: 3px;
         margin-top: 5px;
         font-size: 10px;
         color: #7b8794;
       }
+      #fitsLegend .legend-line {
+        line-height: 1.4;
+      }
       #fitsLegend .swatch {
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 4px;
         width: 9px;
         height: 9px;
         border-radius: 3px;

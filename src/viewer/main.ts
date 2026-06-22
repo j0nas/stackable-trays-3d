@@ -243,10 +243,13 @@ document.getElementById("download")!.addEventListener("click", () => {
   const data = exporter.parse(new Mesh(mesh.geometry), { binary: true });
   const blob = new Blob([data], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
-  const d = dims(params);
+  mesh.geometry.computeBoundingBox();
+  const bb = mesh.geometry.boundingBox; // true footprint incl. the label rail, matching the readout
+  const w = bb ? bb.max.x - bb.min.x : dims(params).outerW;
+  const l = bb ? bb.max.y - bb.min.y : dims(params).outerL;
   const a = document.createElement("a");
   a.href = url;
-  a.download = `tray-${Math.round(d.outerW)}x${Math.round(d.outerL)}mm.stl`;
+  a.download = `tray-${Math.round(w)}x${Math.round(l)}mm.stl`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 });
