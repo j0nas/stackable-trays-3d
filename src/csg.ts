@@ -80,6 +80,7 @@ export type Scope = {
   union: (parts: Solid[]) => Solid; // merge many solids into one
   sub: (a: Solid, b: Solid) => Solid;
   add: (a: Solid, b: Solid) => Solid;
+  intersect: (a: Solid, b: Solid) => Solid; // keep only the overlap (used to clip a panel to a footprint)
   move: (a: Solid, x: number, y: number, z: number) => Solid;
   transform: (a: Solid, m: Mat) => Solid; // affine placement (used for 90° wall swaps)
   finish: (final: Solid) => BufferGeometry; // extract geometry, then free everything tracked
@@ -122,6 +123,7 @@ export function scope(): Scope {
     union: (parts) => keep(mf().Manifold.union(parts)),
     sub: (a, b) => keep(a.subtract(b)),
     add: (a, b) => keep(a.add(b)),
+    intersect: (a, b) => keep(a.intersect(b)),
     move: (a, x, y, z) => keep(a.translate([x, y, z])),
     transform: (a, m) => keep(a.transform(m)),
     finish: (final) => {

@@ -249,7 +249,19 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
         win = s.sub(win, s.move(s.extrude(pad, p.floor + 4), 0, sc.fy, -2));
       }
       windows.push(win);
-      panels.push(s.move(s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8), 0, fcy, 0));
+      // Clip the perforated panel (a plain rectangle) to the SAME rounded footprint as the window,
+      // grown by the bond overlap `ov`. Without this its square corners poke past the rounded corner —
+      // through the lip and stacking groove — once the corner radius gets aggressive (the panel is a
+      // separate rectangle added back over the floor). Intersecting keeps the cells' clean rectangular
+      // EvenOdd fill while rounding the outline.
+      const panel = s.extrude(perforatedPanel(c, fW, fL, ov), p.floor, 8);
+      const clip = s.move(
+        s.extrude(roundedRect(fW + 2 * ov, fL + 2 * ov, winR + ov, open), p.floor + 4),
+        0,
+        0,
+        -2,
+      );
+      panels.push(s.move(s.intersect(panel, clip), 0, fcy, 0));
     }
   }
 
