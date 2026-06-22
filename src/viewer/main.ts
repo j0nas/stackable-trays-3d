@@ -152,14 +152,14 @@ function updateStack(): void {
   });
 }
 
-// Place a clip preview on each enabled front corner (origin = the rail head centre). The download
-// button shows whenever a rail exists, regardless of which corner(s).
+// Place a clip preview on each enabled front corner (origin = the socket seat on the rail). The
+// download button shows whenever a rail exists, regardless of which corner(s).
 function updateClip(): void {
   const place = labelRailPlacement(params);
   for (const side of ["left", "right"] as const) {
     const on = place !== null && place.sides.includes(side);
     clips[side].visible = on;
-    if (on && place) clips[side].position.set(place.x[side], place.faceY, place.baseZ);
+    if (on && place) clips[side].position.set(place.x[side], place.faceY, place.seatZ);
   }
   downloadClipBtn.style.display = place ? "block" : "none";
 }

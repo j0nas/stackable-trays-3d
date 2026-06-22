@@ -14,7 +14,7 @@
 
 import type { BufferGeometry, Shape } from "three";
 import { type Mat, type Scope, type Solid, scope } from "./csg.ts";
-import { RAIL } from "./label.ts";
+import { RAIL, railTaper } from "./label.ts";
 import { type Dims, dims, type LabelSide, type Params } from "./params.ts";
 import { wallShapes } from "./patterns.ts";
 import { dovetailShape, perforatedPanel, rectShape, ringShape, roundedRect } from "./shapes.ts";
@@ -90,8 +90,8 @@ function railSides(side: LabelSide): ("left" | "right")[] {
 // corner and projects forward — the floor is always there, unlike the front wall, which is cut away on
 // an open front or above a lip. Returns null when no side is selected or the tray is too shallow.
 export function labelRailPlacement(p: Params): {
-  railLen: number;
-  baseZ: number; // floor top = rail bottom = clip bottom
+  railTop: number; // rail rises from the bed (z = 0) up to here
+  seatZ: number; // where the clip's socket bottom seats (clip preview z-origin)
   faceY: number; // tray front face: the rib's neck plane and the clip's back
   sides: ("left" | "right")[];
   x: { left: number; right: number }; // rib centre X per side
@@ -103,17 +103,22 @@ export function labelRailPlacement(p: Params): {
   if (p.depth < RAIL.len + 4) return null;
   const d = dims(p);
   const open = Math.min(p.frontLip, p.depth) < 0.05;
+  // Top stays 2 mm below the old flush height so a stacked tray clears the rib; the rail then runs all
+  // the way down to the bed (z = 0), tapering wider as it descends.
+  const railTop = p.floor + RAIL.len - 2;
+  const t = railTaper(railTop);
   // Keep the rib inboard of the front corner so it always welds to the straight front face/edge. An
   // open front squares its front corners (the edge runs straight to the side wall), but a lip or closed
   // front rounds them by cornerRadius — a rib placed out in that curve would weld to nothing and print
-  // as a loose piece. `straight` is the half-length of the straight front section; sit the rib (its wide
-  // tip) just inside it, or near the corner when that's tighter.
+  // as a loose piece. `straight` is the half-length of the straight front section; sit the rib (its
+  // WIDEST, bed-level tip) just inside it, or near the corner when that's tighter.
   const frontCornerR = open ? 0 : p.cornerRadius;
   const straight = d.outerW / 2 - frontCornerR;
-  const xMag = Math.min(d.innerW / 2 - RAIL.tipW / 2 - 1.5, straight - RAIL.tipW / 2 - 0.5);
+  const halfTip = t.widestTipW / 2;
+  const xMag = Math.min(d.innerW / 2 - halfTip - 1.5, straight - halfTip - 0.5);
   return {
-    railLen: RAIL.len,
-    baseZ: p.floor, // floor top = the seat the clip's stop bottoms on
+    railTop,
+    seatZ: t.seatZ,
     faceY: floorFrontY(p, d, open),
     sides,
     x: { left: -xMag, right: xMag },
@@ -207,6 +212,17 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
       // fill in, then cutScoop removes the clean notch. Same trick as the floor.
       const sc = scoopDims(p, d);
       if (sc) win = s.sub(win, s.move(s.box(sc.w + 2 * m, cut + 4, lipHt + 4), 0, -ry, czFront));
+      // Keep the front wall solid behind each label rail: the rib welds onto this face, and on a
+      // perforated front (voronoi/lattice) its inner edge would otherwise back onto an open cell. The
+      // straight-front border is narrower than the rib, so we can't just shift the rib clear — reserve a
+      // solid column at each rib's X instead (same reserve-then-refill trick as the scoop).
+      const place = labelRailPlacement(p);
+      if (place) {
+        for (const side of place.sides) {
+          const xc = side === "left" ? place.x.left : place.x.right;
+          win = s.sub(win, s.move(s.box(RAIL.tipW + 4, cut + 4, lipHt + 4), xc, -ry, czFront));
+        }
+      }
       windows.push(win);
       panels.push(
         onWall(s, perforatedPanel(c, rearLen, lipHt, ov), "rear", 0, -ry, czFront, p.wall),
@@ -272,34 +288,33 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
   return s.add(tray, s.union(panels));
 }
 
-// Optional label-clip rails: a short dovetail rib GLUED onto the tray's front face at the chosen
-// corner(s). The rib's neck overlaps the face by a hairline `weld` — just enough for a watertight
-// union — and nothing more reaches into the body, so it never touches the stacking ridge (wall top) or
-// the groove (floor underside): a closed or partial front still nests cleanly. The rib's mass projects
-// forward and tops out well below the wall, so a stacked tray clears it. A small foot straddles the
-// floor's front edge (always present, unlike the front wall) to weld the rib down; it sits above the
-// groove, so even a closed front keeps a clean nest.
+// Optional label-clip rails: a tapered dovetail rib GLUED onto the tray's front face at the chosen
+// corner(s), rising from the bed (z = 0) to just below the wall top. The neck overlaps the face by a
+// hairline `weld` — enough for a watertight union — and only the neck reaches into the body, so it never
+// fouls the stacking ridge (wall top) or the groove (floor underside): a closed or partial front still
+// nests cleanly. Widest at the bed and drafting inward as it climbs, it prints support-free, and the
+// taper is what stops the clip (no skirt) — see label.ts. Tops out well below the wall, so a stacked
+// tray clears it.
 function addLabelRails(s: Scope, p: Params, tray: Solid): Solid {
   const place = labelRailPlacement(p);
   if (!place) return tray;
-  const { railLen, baseZ, faceY, x, sides } = place;
+  const { railTop, faceY, x, sides } = place;
   const { neckW, tipW, projY } = RAIL;
-  // Hairline overlap into the face — fuses the rib to the body without protruding into it. The groove
-  // never rises above baseZ − 0.4 (gDepth ≤ floor − 0.4), so the foot below clears it for any config.
+  const { baseScale, scaleTopRel } = railTaper(railTop);
+  // Hairline overlap into the face — fuses the rib to the body without protruding into it. Over its
+  // z = 0 .. floor base the neck sliver welds into the floor's front edge (and into the front wall for a
+  // lip/closed front); above that it cantilevers as a free rib on an open front.
   const weld = 0.4;
   for (const side of sides) {
     const xc = side === "left" ? x.left : x.right;
-    // Dovetail flare: rises from z = baseZ (its underside is the shoulder the clip's stop seats on),
-    // projecting forward. dovetailShape is centred with its neck (+Y) edge at +projY/2, so shift it so
-    // the neck overlaps the face by `weld` and the wider tip leads. Run it 2 mm short of the clip's
-    // socket depth so the rib top tucks just inside the socket mouth rather than poking out.
-    let flare = s.extrude(dovetailShape(neckW, tipW, projY), railLen - 2);
-    flare = s.move(flare, xc, faceY + weld - projY / 2, baseZ);
-    // Foot: a hairline weld straddling the floor top (z = baseZ ± 0.4) that bridges the rib to the
-    // floor's front edge. Kept above the stacking groove, so it never fouls the nest, and it bites only
-    // `weld` into the body — flush-glued, not a post sunk into the floor.
-    const foot = s.move(s.box(neckW, weld, 0.8), xc, faceY + weld / 2, baseZ);
-    tray = s.add(tray, s.union([flare, foot]));
+    // One tapered dovetail from the bed (z = 0, widest) to railTop (narrowest). anchorNeck pins the neck
+    // edge on the local Y = 0 line; manifold scales the extrusion top about the origin, so the neck
+    // stays welded to the face at every height while the tip and width draft inward going up. The bed
+    // end is full `baseScale`; scaleTopRel brings the top down to RAIL.topScale × nominal.
+    const base = dovetailShape(neckW * baseScale, tipW * baseScale, projY * baseScale, true);
+    let rib = s.extrude(base, railTop, 12, { x: scaleTopRel, y: scaleTopRel });
+    rib = s.move(rib, xc, faceY + weld, 0);
+    tray = s.add(tray, rib);
   }
   return tray;
 }

@@ -74,8 +74,15 @@ function toGeometry(man: Solid): BufferGeometry {
 // grow across rebuilds. Boolean/transform ops return fresh solids (Manifold is immutable) — those are
 // tracked too, so the whole intermediate tree is reclaimed in one pass.
 export type Scope = {
-  // Extrude a 2D shape (with optional holes) up +Z (z = 0 .. height) as a manifold solid.
-  extrude: (shape: Shape, height: number, curveSegments?: number) => Solid;
+  // Extrude a 2D shape (with optional holes) up +Z (z = 0 .. height) as a manifold solid. `scaleTop`
+  // scales the top cross-section relative to the bottom about the local origin (0,0) — pass < 1 to taper
+  // it into a frustum/wedge (verified: a profile centred at x=10 lands at x=5 on top with scale 0.5).
+  extrude: (
+    shape: Shape,
+    height: number,
+    curveSegments?: number,
+    scaleTop?: { x: number; y: number },
+  ) => Solid;
   box: (w: number, d: number, h: number) => Solid; // origin-centred box (matches BoxGeometry)
   union: (parts: Solid[]) => Solid; // merge many solids into one
   sub: (a: Solid, b: Solid) => Solid;
@@ -93,7 +100,7 @@ export function scope(): Scope {
     return s;
   };
   return {
-    extrude: (shape, height, curveSegments = 12) => {
+    extrude: (shape, height, curveSegments = 12, scaleTop = { x: 1, y: 1 }) => {
       const m = mf();
       const ring = (pts: { x: number; y: number }[]): [number, number][] =>
         pts.map((p) => [p.x, p.y]);
@@ -111,10 +118,10 @@ export function scope(): Scope {
       const polys = lower._ToPolygons?.();
       let man: Solid;
       if (polys && extrude) {
-        man = extrude(polys, height, 0, 0, { x: 1, y: 1 });
+        man = extrude(polys, height, 0, 0, scaleTop);
         polys.delete();
       } else {
-        man = cs.extrude(height);
+        man = cs.extrude(height, 0, 0, [scaleTop.x, scaleTop.y]);
       }
       cs.delete();
       return keep(man);
