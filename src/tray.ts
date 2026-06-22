@@ -103,7 +103,14 @@ export function labelRailPlacement(p: Params): {
   if (p.depth < RAIL.len + 4) return null;
   const d = dims(p);
   const open = Math.min(p.frontLip, p.depth) < 0.05;
-  const xMag = d.innerW / 2 - RAIL.tipW / 2 - 1.5; // near the corner, inboard of the side wall
+  // Keep the rib inboard of the front corner so it always welds to the straight front face/edge. An
+  // open front squares its front corners (the edge runs straight to the side wall), but a lip or closed
+  // front rounds them by cornerRadius — a rib placed out in that curve would weld to nothing and print
+  // as a loose piece. `straight` is the half-length of the straight front section; sit the rib (its wide
+  // tip) just inside it, or near the corner when that's tighter.
+  const frontCornerR = open ? 0 : p.cornerRadius;
+  const straight = d.outerW / 2 - frontCornerR;
+  const xMag = Math.min(d.innerW / 2 - RAIL.tipW / 2 - 1.5, straight - RAIL.tipW / 2 - 0.5);
   return {
     railLen: RAIL.len,
     baseZ: p.floor, // floor top = the seat the clip's stop bottoms on
@@ -221,9 +228,17 @@ function applyPatterns(s: Scope, p: Params, tray: Solid, d: Dims): Solid {
     const fW = innerW - 2 * m;
     const fL = fBack - fFront;
     const fcy = (fFront + fBack) / 2; // window centre (off origin once the open front shortens it)
+    // Round the window's corners to follow the cavity's rounded corners (radius innerR) at the same m
+    // offset, so the pattern fills into the corner and the solid border stays a uniform width. A plain
+    // rectangle leaves a square corner that, at a generous corner radius, pokes a sharp wedge into the
+    // rounded corner and thins the border there. Front corners stay square on an open front (no wall to
+    // round into), matching the body. innerR < m clamps to a near-square corner — the correct uniform
+    // inset when the corner is tighter than the margin.
+    const innerR = Math.max(p.cornerRadius - p.wall, 0.6);
+    const winR = Math.max(innerR - m, 0.5);
     if (fW > 12 && fL > 12) {
       const c = wallShapes(p.floorStyle, fW, fL, 3, p.floorPatternScale);
-      let win = s.move(s.extrude(rectShape(0, 0, fW, fL), p.floor + 2), 0, fcy, -1);
+      let win = s.move(s.extrude(roundedRect(fW, fL, winR, open), p.floor + 2), 0, fcy, -1);
       // Reserve the same m border around the scoop: bite the m-dilated scoop out of the window so the
       // floor stays solid there; cutScoop later removes the un-dilated notch, leaving an m border (matching
       // the perimeter) instead of stray cut-off cell ends along the scoop edge. Holes left in the re-added
