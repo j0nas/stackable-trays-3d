@@ -1,5 +1,9 @@
 # stackable-trays
 
+> **Moved (2026-10-13).** The 3D-printed A4 trays live on in the formeriet workspace
+> (`j0nas/formeriet`, `packages/product-a4-trays`), which has every parameter and item preset this
+> app had; the printer fit check is in its readout. This repo is archived.
+
 Parametric, open-front, **stackable trays** for FDM 3D printing — **A4 paper by default**, but sized
 for any item (photos, cards, envelopes, …) via item dimensions or one-click presets. Tune everything
 with sliders, watch the model and the filament estimate update live, then export a print-ready STL.
